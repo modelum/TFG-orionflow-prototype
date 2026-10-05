@@ -79,15 +79,6 @@ class Library {
 	/** 
 	 * Check if a entity is used in a JPQL query
 	 */
-	// predicate usesOldEntity(Expr queryValue, Class parent) {
-	  // queryValue.toString().regexpMatch(
-	    // "(?i).*\\b(FROM|UPDATE|DELETE\\s+FROM)\\s+" + parent.getName() + "\\b.*"
-	  // )
-	  // or
-	  // queryValue.toString().regexpMatch(
-	    // "(?i).*\\bJOIN\\s+(?:FETCH\\s+)?" + parent.getName() + "\\b.*"
-	  //)
-	//}
     predicate usesOldEntity(StringLiteral queryValue, Class parent) {
   		queryValue.getValue().regexpMatch(
    				 "(?i).*\\b(FROM|UPDATE|DELETE\\s+FROM)\\s+" + parent.getName() + "\\b.*"
