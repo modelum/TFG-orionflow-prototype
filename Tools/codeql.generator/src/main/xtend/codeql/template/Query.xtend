@@ -1,76 +1,92 @@
 package codeql.template
 
 class Query {
-	
-	static def generateEntityDeleteOp(String entityName)
-	'''
-	import java
-	import utils
-	
-	from Class entity, Location usageLoc, string message
-	where
-	  entity.hasName("«entityName»") and
-	  isEntity(entity) and
-	  (
-	    (usageLoc = entity.getLocation() and
-	    message = "Entity '" + entity.getName() + "' is marked for deletion.")
-	
-	    or
-	    // Relaciones en otras entidades (@ManyToOne, @OneToOne, etc.)
-	    exists(Field field |
-	      field.getType() = entity and hasJpaAssociationTo(field) 
-	      and usageLoc = field.getLocation() 
-	      and message = "Field '" + field.getName() + "' references entity '" + entity.getName() + "' which is being deleted."
-	    )
-	    or
-	    // Queries 
-	    exists(Annotation nq, Annotation q |
-	      (
-	        // Search namedQuery actives
-	        (isQuery(q) and
-	        isNamedQuery(nq) and
-	        isEqual(nq.getValue("name"), q.getValue("name")) and
-	        usesOldEntity(nq.getValue("query"), entity) and
-	        usageLoc = q.getTarget().getLocation() and
-	        message = "Named query uses entity '" + entity.getName() + "' which is marked for deletion.")
-	
-	        or
-	        // Search queries
-	        (isQuery(q) and
-	        usesOldEntity(q.getValue("value"), entity) and
-	        usageLoc = q.getTarget().getLocation() and
-	        message = "Query uses entity '" + entity.getName() + "' which is marked for deletion.")
-	
-	        or
-	        // Search createQuery
-	        exists(MethodCall call |
-	          isCreateQuery(call) and
-	          exists(StringLiteral queryLiteral |
-	            queryLiteral = call.getArgument(0) and
-	            usesOldEntity(queryLiteral, entity)
-	          ) and
-	          usageLoc = call.getLocation() and
-	          message = "Call to createQuery uses entity '" + entity.getName() + "' which is marked for deletion."
-	        )
-	
-	        or
-	        // Search createNamedQuery
-	        exists(MethodCall call |
-	          isCreateNamedQuery(call) and
-	          exists(StringLiteral nameArg |
-	            nameArg = call.getArgument(0) and
-	            isNamedQuery(nq) and
-	            "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
-	            usesOldEntity(nq.getValue("query"), entity)
-	          ) and
-	          usageLoc = call.getLocation() and
-	          message = "Call to createNamedQuery uses entity '" + entity.getName() + "' which is marked for deletion."
-	        )
-	      )
-	    )
-	  )
-	select usageLoc, message
-	'''
+
+   static def generateEntityDeleteOp(String entityName)
+		'''
+		import java
+		import utils
+		
+		from Class entity, Location usageLoc, string message
+		where
+		  entity.hasName("«entityName»") and
+		  isEntity(entity) and
+		  (
+		    (
+		      usageLoc = entity.getLocation() and
+		      message =
+		        "Entity '" + entity.getName() + "' is marked for deletion."
+		    )
+		
+		    or
+		    // Relationships in other entities
+		    exists(Field field |
+		      field.getType() = entity and
+		      hasJpaAssociationTo(field) and
+		      usageLoc = field.getLocation() and
+		      message =
+		        "Field '" + field.getName() +
+		        "' references entity '" + entity.getName() +
+		        "' which is being deleted."
+		    )
+		
+		    or
+		    // Named JPQL queries referenced through @Query
+		    exists(Annotation nq, Annotation q, StringLiteral queryLiteral |
+		      isQuery(q) and
+		      isNamedQuery(nq) and
+		      isEqual(nq.getValue("name"), q.getValue("name")) and
+		      queryLiteral = nq.getValue("query") and
+		      usesOldEntity(queryLiteral, entity) and
+		      usageLoc = q.getTarget().getLocation() and
+		      message =
+		        "Named query uses entity '" + entity.getName() +
+		        "' which is marked for deletion."
+		    )
+		
+		    or
+		    // JPQL queries in @Query
+		    exists(Annotation q, StringLiteral queryLiteral |
+		      isQuery(q) and
+		      queryLiteral = q.getValue("value") and
+		      usesOldEntity(queryLiteral, entity) and
+		      usageLoc = q.getTarget().getLocation() and
+		      message =
+		        "Query uses entity '" + entity.getName() +
+		        "' which is marked for deletion."
+		    )
+		
+		    or
+		    // EntityManager.createQuery(...)
+		    exists(MethodCall call, StringLiteral queryLiteral |
+		      isCreateQuery(call) and
+		      queryLiteral = call.getArgument(0) and
+		      usesOldEntity(queryLiteral, entity) and
+		      usageLoc = call.getLocation() and
+		      message =
+		        "Call to createQuery uses entity '" + entity.getName() +
+		        "' which is marked for deletion."
+		    )
+		
+		    or
+		    // EntityManager.createNamedQuery(...)
+		    exists(MethodCall call, StringLiteral nameArg,
+		           Annotation nq, StringLiteral queryLiteral |
+		      isCreateNamedQuery(call) and
+		      nameArg = call.getArgument(0) and
+		      isNamedQuery(nq) and
+		      "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
+		      queryLiteral = nq.getValue("query") and
+		      usesOldEntity(queryLiteral, entity) and
+		      usageLoc = call.getLocation() and
+		      message =
+		        "Call to createNamedQuery uses entity '" + entity.getName() +
+		        "' which is marked for deletion."
+		    )
+		  )
+		
+		select usageLoc, message
+		'''	      
 	
 	static def generateEntityRenameOp(String oldEntityName, String newEntityName)
 		'''
