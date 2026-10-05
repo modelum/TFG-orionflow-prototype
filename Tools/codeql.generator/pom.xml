@@ -69,25 +69,25 @@
     <sourceDirectory>src/main/xtend</sourceDirectory>
     <plugins>
 
-      <!-- 1) Xtend: compila tus .xtend usando el modelo Orion de la dependencia -->
-      <plugin>
-        <groupId>org.eclipse.xtend</groupId>
-        <artifactId>xtend-maven-plugin</artifactId>
-        <version>2.25.0</version>
-        <executions>
-          <execution>
-            <id>compile-xtend</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>compile</goal>
-              <goal>xtend-install-debug-info</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <outputDirectory>${project.build.directory}/xtend-gen</outputDirectory>
-        </configuration>
-      </plugin>
+         <plugin>
+           <groupId>org.codehaus.mojo</groupId>
+           <artifactId>build-helper-maven-plugin</artifactId>
+           <version>3.5.0</version>
+           <executions>
+             <execution>
+               <id>add-generated-sources</id>
+               <phase>generate-sources</phase>
+               <goals>
+                 <goal>add-source</goal>
+               </goals>
+               <configuration>
+                 <sources>
+                   <source>${project.basedir}/src/main/xtend-gen</source>
+                 </sources>
+               </configuration>
+             </execution>
+           </executions>
+         </plugin>
 
       <!-- 2) Java compiler: incluye el directorio xtend-gen -->
       <plugin>
@@ -126,7 +126,7 @@
               </filters>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>main.Main</mainClass>
+                  <mainClass>main.Orion2CodeQLMain</mainClass>
                 </transformer>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
               </transformers>
