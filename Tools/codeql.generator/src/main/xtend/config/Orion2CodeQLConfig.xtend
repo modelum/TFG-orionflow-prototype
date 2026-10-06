@@ -1,17 +1,15 @@
 package config
 
 import java.nio.file.Path
-import java.util.Properties
 import org.apache.commons.cli.Options
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.DefaultParser
-import org.apache.commons.cli.ParseException
-import config.defaults.DefaultConfig
 
 class Orion2CodeQLConfig {
 	Path inputScript
 	Path outputPath
+	AnalysisMode analysisMode = AnalysisMode.STRUCTURAL_SEMANTIC
   
   	/**
    	* Constructor que parsea los argumentos de línea de comandos.
@@ -52,6 +50,15 @@ class Orion2CodeQLConfig {
 	    
 	    options.addOption(outputOption)
 
+	    val modeOption = Option.builder("m")
+	      .longOpt("mode")
+	      .desc("Analysis mode: STRUCTURAL, STRUCTURAL_SEMANTIC or DATAFLOW")
+	      .hasArg()
+	      .argName("analysis_mode")
+	      .build()
+
+	    options.addOption(modeOption)
+
 	    val parser = new DefaultParser
 	    val formatter = new HelpFormatter
 
@@ -70,8 +77,12 @@ class Orion2CodeQLConfig {
 	      if (cmd.hasOption("o")) {
 	        this.outputPath = Path.of(cmd.getOptionValue("o"))
 	      }
+
+	      if (cmd.hasOption("m")) {
+	        this.analysisMode = AnalysisMode.parse(cmd.getOptionValue("m"))
+	      }
 	
-	    } catch (ParseException e) {
+	    } catch (Exception e) {
 	      println(e.message)
 	      formatter.printHelp("<SpringDataJPA Predictor> ", options)
 	      System.exit(1)
@@ -93,5 +104,9 @@ class Orion2CodeQLConfig {
   	def Path getOutputPath() {
     	return this.outputPath
   	}
+
+	def AnalysisMode getAnalysisMode() {
+		return this.analysisMode
+	}
 		
 }

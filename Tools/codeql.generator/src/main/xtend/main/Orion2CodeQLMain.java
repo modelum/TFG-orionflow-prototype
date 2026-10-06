@@ -66,7 +66,7 @@ public class Orion2CodeQLMain {
     private static void runAnalyzer(Orion2CodeQLConfig config, Injector injector) {
         try {
             var orionOps = loadAst(config, injector);
-            Map<String, String> results = new Orion2CodeQL().m2t(orionOps);
+            Map<String, String> results = new Orion2CodeQL(config.getAnalysisMode()).m2t(orionOps);
             writeResults(config, results);
             System.out.println("<SpringDataJPA CodeQL Generator> Transformation completed successfully!");
         } catch (Exception e) {

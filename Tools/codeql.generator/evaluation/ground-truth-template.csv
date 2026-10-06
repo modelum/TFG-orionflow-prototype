@@ -1,0 +1,2 @@
+rule_id,file,start_line,construct
+java/orion/entity-renamed/0,src/main/java/example/VisitService.java,12,type-reference
