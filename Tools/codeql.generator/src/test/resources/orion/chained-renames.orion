@@ -1,0 +1,6 @@
+Chained_renames operations
+
+USING TestSchema:1
+
+RENAME ENTITY Visit TO Appointment
+RENAME Appointment::startDatetime TO startDate

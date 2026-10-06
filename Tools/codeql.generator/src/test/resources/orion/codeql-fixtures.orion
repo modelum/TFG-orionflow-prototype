@@ -1,0 +1,11 @@
+Codeql_fixtures operations
+
+USING Fixture:1
+
+RENAME ENTITY Visit TO Consultation
+RENAME Consultation::birthDate TO dateOfBirth
+DELETE Consultation::dateOfBirth
+CAST ATTR Consultation::date TO String
+DELETE ENTITY Consultation
+RENAME RELATIONSHIP vet_specialties TO vet_expertise
+DELETE RELATIONSHIP vet_expertise

@@ -1,8 +1,14 @@
 package codeql.template
 
+import config.AnalysisMode
+
 class Query {
 
-   static def generateEntityDeleteOp(String entityName)
+	static def generateEntityDeleteOp(String entityName) {
+		generateEntityDeleteOp(entityName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+   static def generateEntityDeleteOp(String entityName, AnalysisMode mode)
 		'''
 		import java
 		import utils
@@ -21,15 +27,29 @@ class Query {
 		    )
 		
 		    or
-		    // Relationships in other entities
-		    exists(Field field |
-		      field.getType() = entity and
-		      hasJpaAssociationTo(field) and
-		      usageLoc = field.getLocation() and
+		    // Any source type reference resolved to the affected entity. This
+		    // covers fields, generic arguments, parameters, returns, locals,
+		    // supertypes, interfaces and repository declarations.
+		    exists(TypeAccess typeReference |
+		      referencesEntityType(typeReference, entity) and
+		      not exists(ClassInstanceExpr creation |
+		        creation.getTypeName() = typeReference
+		      ) and
+		      usageLoc = typeReference.getLocation() and
 		      message =
-		        "Field '" + field.getName() +
-		        "' references entity '" + entity.getName() +
-		        "' which is being deleted."
+		        "Resolved type reference to entity '" + entity.getName() +
+		        "' must be removed or replaced because the entity is being deleted."
+		    )
+
+		    or
+		    // Constructor calls are reported once at the complete construction,
+		    // rather than again at their nested type access.
+		    exists(ClassInstanceExpr creation |
+		      constructsEntity(creation, entity) and
+		      usageLoc = creation.getLocation() and
+		      message =
+		        "Construction of entity '" + entity.getName() +
+		        "' is invalid after the entity is deleted."
 		    )
 		
 		    or
@@ -90,7 +110,11 @@ class Query {
 		select usageLoc, message
 		'''	      
 	
-	static def generateEntityRenameOp(String oldEntityName, String newEntityName)
+	static def generateEntityRenameOp(String oldEntityName, String newEntityName) {
+		generateEntityRenameOp(oldEntityName, newEntityName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	static def generateEntityRenameOp(String oldEntityName, String newEntityName, AnalysisMode mode)
 		'''
 		import java
 		import utils
@@ -111,15 +135,25 @@ class Query {
 		    )
 		
 		    or
-		    // Field references in other entities
-		    exists(Field field |
-		      field.getType().getName() = oldEntity.getName() and
-		      hasJpaAssociationTo(field) and
-		      usageLoc = field.getLocation() and
+		    // Any source type reference resolved to the affected entity.
+		    exists(TypeAccess typeReference |
+		      referencesEntityType(typeReference, oldEntity) and
+		      not exists(ClassInstanceExpr creation |
+		        creation.getTypeName() = typeReference
+		      ) and
+		      usageLoc = typeReference.getLocation() and
 		      message =
-		        "Field '" + field.getName() +
-		        "' references old entity name '" + oldEntity.getName() +
-		        "' which will be renamed to '" + newName + "'."
+		        "Resolved type reference to entity '" + oldEntity.getName() +
+		        "' must be renamed to '" + newName + "'."
+		    )
+
+		    or
+		    exists(ClassInstanceExpr creation |
+		      constructsEntity(creation, oldEntity) and
+		      usageLoc = creation.getLocation() and
+		      message =
+		        "Construction of entity '" + oldEntity.getName() +
+		        "' must use the new name '" + newName + "'."
 		    )
 		
 		    or
@@ -182,10 +216,19 @@ class Query {
 	
 	 
 	
-	static def generateFeatureRenameOp(String entityName, String featureOldName, String featureNewName)
+	static def generateFeatureRenameOp(String entityName, String featureOldName, String featureNewName) {
+		generateFeatureRenameOp(entityName, featureOldName, featureNewName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	static def generateFeatureRenameOp(String entityName, String featureOldName, String featureNewName, AnalysisMode mode)
 	'''
 	import java
 	import utils
+
+	«Library.generateUsesField(entityName, featureOldName)»
+	«IF mode.includesSemantic»
+	«Library.generateFeatureSemanticPredicates(entityName, featureOldName)»
+	«ENDIF»
 	
 	from
 	  Class entity, Field featureField, Location usageLoc, string oldName, string newName,
@@ -209,11 +252,9 @@ class Query {
 	      isEmbeddable(embeddedClass) and
 	      embeddedField = embeddedClass.getAField() and
 	      embeddedField.getName() = oldName and
+	      containerField.getDeclaringType() = entity and
 	      containerField.getType() = embeddedClass and
-	      exists(Annotation embedded |
-	        embedded = containerField.getAnAnnotation() and
-	        embedded.getType().hasQualifiedName("jakarta.persistence", "Embedded")
-	      ) and
+	      isEmbeddedField(containerField) and
 	      usageLoc = embeddedField.getLocation() and
 	      message = "Embedded field '" + oldName + "' matches feature '" + oldName + "' which will be renamed to '" + newName + "'."
 	    )
@@ -225,14 +266,53 @@ class Query {
 	      usageLoc = method.getLocation() and
 	      message = "Method '" + method.getName() + "' accesses feature '" + oldName + "' which will be renamed to '" + newName + "'."
 	    )
+
+	    or
+	    // resolved calls to the getter/setter, including calls from other classes
+	    exists(MethodCall call |
+	      callsAccessor(call, featureField) and
+	      usageLoc = call.getLocation() and
+	      message = "Call to accessor '" + call.getMethod().getName() +
+	        "' depends on feature '" + oldName + "' which will be renamed to '" + newName + "'."
+	    )
 	
 	    or
 	    // direct access to the feature
 	    exists(FieldAccess access |
 	      access.getField() = featureField and
+	      not isAccessInsideAccessor(access, featureField) and
 	      usageLoc = access.getLocation() and
 	      message = "Direct access to feature '" + oldName + "' which will be renamed to '" + newName + "'."
 	    )
+
+	    «IF mode.includesSemantic»
+	    or
+	    // JPA metadata whose value names the affected feature.
+	    exists(Annotation metadata |
+	      jpaMetadataReferencesField(metadata, featureField) and
+	      usageLoc = metadata.getLocation() and
+	      message = "JPA metadata references feature '" + oldName +
+	        "' which will be renamed to '" + newName + "'."
+	    )
+
+	    or
+	    // Exact Spring validation property name in an entity-binding callable.
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isSpringPropertyReference(call, propertyName, entity) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Spring API references property '" + oldName +
+	        "' which will be renamed to '" + newName + "'."
+	    )
+
+	    or
+	    // Spring Data query method whose repository generic is the entity.
+	    exists(Method repositoryMethod |
+	      isSpringDataDerivedQuery(repositoryMethod, entity) and
+	      usageLoc = repositoryMethod.getLocation() and
+	      message = "Spring Data derived query method '" + repositoryMethod.getName() +
+	        "' references feature '" + oldName + "' which will be renamed to '" + newName + "'."
+	    )
+	    «ENDIF»
 	
 	    or
 	    // query annotations
@@ -242,14 +322,14 @@ class Query {
 	        (isQuery(q) and
 	        isNamedQuery(nq) and
 	        isEqual(nq.getValue("name"), q.getValue("name")) and
-	        usesField(nq.getValue("query"), featureField) and
+	        usesField(nq.getValue("query")) and
 	        usageLoc = q.getLocation() and
 	        message = "Named query uses feature '" + oldName + "' which will be renamed to '" + newName + "'.")
 	        or
 	
 	        // Query
 	        (isQuery(q) and
-	        usesField(q.getValue("value"), featureField) and
+	        usesField(q.getValue("value")) and
 	        usageLoc = q.getLocation() and
 	        message = "Query uses feature '" + oldName + "' which will be renamed to '" + newName + "'.")
 	      )
@@ -262,7 +342,7 @@ class Query {
 	        (isCreateQuery(call) and
 	        exists(StringLiteral queryLiteral |
 	          queryLiteral = call.getArgument(0) and
-	          usesField(queryLiteral, featureField)
+	          usesField(queryLiteral)
 	        ))
 	
 	        or
@@ -271,7 +351,7 @@ class Query {
 	          nameArg = call.getArgument(0) and
 	          isNamedQuery(nq2) and
 	          "\"" + nameArg.getValue() + "\"" = nq2.getValue("name").toString() and
-	          usesField(nq2.getValue("query"), featureField)
+	          usesField(nq2.getValue("query"))
 	        ))
 	      ) and
 	      usageLoc = call.getLocation() and
@@ -281,10 +361,19 @@ class Query {
 	select usageLoc, message
 	'''
 	
-	static def generateFeatureDeleteOp(String entityName, String featureName)
+	static def generateFeatureDeleteOp(String entityName, String featureName) {
+		generateFeatureDeleteOp(entityName, featureName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	static def generateFeatureDeleteOp(String entityName, String featureName, AnalysisMode mode)
 	'''
 	import java
 	import utils
+
+	«Library.generateUsesField(entityName, featureName)»
+	«IF mode.includesSemantic»
+	«Library.generateFeatureSemanticPredicates(entityName, featureName)»
+	«ENDIF»
 	
 	from Class entity, Field attributeField, Location usageLoc, string message
 	where
@@ -303,11 +392,9 @@ class Query {
 	      isEmbeddable(embeddedClass) and
 	      embeddedField = embeddedClass.getAField() and
 	      embeddedField.getName() = attributeField.getName() and
+	      containerField.getDeclaringType() = entity and
 	      containerField.getType() = embeddedClass and
-	      exists(Annotation embedded |
-	        embedded = containerField.getAnAnnotation() and
-	        embedded.getType().hasQualifiedName("jakarta.persistence", "Embedded")
-	      ) and
+	      isEmbeddedField(containerField) and
 	      usageLoc = embeddedField.getLocation() and
 	      message = "Embedded field '" + embeddedField.getName() + "' matches attribute '" + attributeField.getName() + "' which will be deleted."
 	    )
@@ -319,14 +406,49 @@ class Query {
 	      usageLoc = method.getLocation() and
 	      message = "Method '" + method.getName() + "' accesses attribute '" + attributeField.getName() + "' which will be deleted."
 	    )
+
+	    or
+	    exists(MethodCall call |
+	      callsAccessor(call, attributeField) and
+	      usageLoc = call.getLocation() and
+	      message = "Call to accessor '" + call.getMethod().getName() +
+	        "' depends on attribute '" + attributeField.getName() + "' which will be deleted."
+	    )
 	
 	    or
 	    // direct access to the attribute
 	    exists(FieldAccess access |
 	      access.getField() = attributeField and
+	      not isAccessInsideAccessor(access, attributeField) and
 	      usageLoc = access.getLocation() and
 	      message = "Direct access to attribute '" + attributeField.getName() + "' which will be deleted."
 	    )
+
+	    «IF mode.includesSemantic»
+	    or
+	    exists(Annotation metadata |
+	      jpaMetadataReferencesField(metadata, attributeField) and
+	      usageLoc = metadata.getLocation() and
+	      message = "JPA metadata references attribute '" + attributeField.getName() +
+	        "' which will be deleted."
+	    )
+
+	    or
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isSpringPropertyReference(call, propertyName, entity) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Spring API references property '" + attributeField.getName() +
+	        "' which will be deleted."
+	    )
+
+	    or
+	    exists(Method repositoryMethod |
+	      isSpringDataDerivedQuery(repositoryMethod, entity) and
+	      usageLoc = repositoryMethod.getLocation() and
+	      message = "Spring Data derived query method '" + repositoryMethod.getName() +
+	        "' references attribute '" + attributeField.getName() + "' which will be deleted."
+	    )
+	    «ENDIF»
 	
 	    or
 	    // query annotations
@@ -336,13 +458,13 @@ class Query {
 	        (isQuery(q) and
 	        isNamedQuery(nq) and
 	        isEqual(nq.getValue("name"), q.getValue("name")) and
-	        usesField(nq.getValue("query"), attributeField) and
+	        usesField(nq.getValue("query")) and
 	        usageLoc = q.getTarget().getLocation() and
 	        message = "Named query uses attribute '" + attributeField.getName() + "' which will be deleted.")
 	
 	        or
 	        // Regular queries
-	        (isQuery(q) and usesField(q.getValue("value"), attributeField)) and
+	        (isQuery(q) and usesField(q.getValue("value"))) and
 	        usageLoc = q.getTarget().getLocation() and
 	        message = "Query uses attribute '" + attributeField.getName() + "' which will be deleted."
 	      )
@@ -356,7 +478,7 @@ class Query {
 	        (isCreateQuery(call) and
 	        exists(StringLiteral queryLiteral |
 	          queryLiteral = call.getArgument(0) and
-	          usesField(queryLiteral, attributeField)
+	          usesField(queryLiteral)
 	        ))
 	
 	        or
@@ -365,7 +487,7 @@ class Query {
 	          nameArg = call.getArgument(0) and
 	          isNamedQuery(nq) and
 	          "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
-	          usesField(nq.getValue("query"), attributeField)
+	          usesField(nq.getValue("query"))
 	        ))
 	      ) and
 	      usageLoc = call.getLocation() and
@@ -375,9 +497,16 @@ class Query {
 	select usageLoc, message
 	'''
 	
-	static def generateAttributeCastOp(String entityName, String fieldName, String newFieldType)
+	static def generateAttributeCastOp(String entityName, String fieldName, String newFieldType) {
+		generateAttributeCastOp(entityName, fieldName, newFieldType, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	static def generateAttributeCastOp(String entityName, String fieldName, String newFieldType, AnalysisMode mode)
 	'''
 	import java
+	«IF mode.includesDataFlow»
+	import semmle.code.java.dataflow.DataFlow
+	«ENDIF»
 	import utils
 	
 	from
@@ -402,6 +531,15 @@ class Query {
 	      usageLoc = method.getLocation() and
 	      message = "Method '" + method.getName() + "' uses attribute '" + attributeField.getName() + "' with type '" + oldType + "' which will be changed to '" + newType + "'."
 	    )
+
+	    or
+	    // Calls are resolved to the exact accessor, avoiding homonymous methods.
+	    exists(MethodCall accessorCall |
+	      callsAccessor(accessorCall, attributeField) and
+	      usageLoc = accessorCall.getLocation() and
+	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
+	        "' depends on attribute type '" + oldType + "' which will change to '" + newType + "'."
+	    )
 	
 	    or
 	    // direct access to the attribute
@@ -413,33 +551,67 @@ class Query {
 	
 	    or
 	    // variable declarations with used attribute
-	    exists(LocalVariableDeclExpr varDecl |
-	      exists(FieldAccess access |
-	        access.getField() = attributeField and
-	        varDecl.getInit() = access and
-	        varDecl.getType().getName() = oldType
-	      ) and
+	    exists(LocalVariableDeclExpr varDecl, Expr source |
+	      source = varDecl.getInit() and
+	      readsFieldValue(source, attributeField) and
+	      varDecl.getType().getName() = oldType and
+	      oldType != newType and
 	      usageLoc = varDecl.getLocation() and
-	      message = "Variable declaration uses attribute '" + attributeField.getName() + "' with type '" + oldType + "' which will be changed to '" + newType + "'."
+	      message = "Variable declaration expects old type '" + oldType +
+	        "' from attribute '" + attributeField.getName() + "', which will change to '" + newType + "'."
 	    )
-	
+
 	    or
-	    // 5. Field is passed to a method expecting the specific type
-	    exists(MethodCall call, FieldAccess access |
-	      access.getField() = attributeField and
-	      call.getAnArgument() = access and
-	      exists(int i |
-	        call.getArgument(i) = access and
-	        call.getMethod().getParameterType(i).getName() = oldType
-	      ) and
-	      usageLoc = call.getLocation() and
-	      message = "Method call passes attribute '" + attributeField.getName() + "' of type '" + oldType + "' which will be changed to '" + newType + "'."
+	    // Assignment target still expects the old type.
+	    exists(Assignment assignment, Expr source |
+	      source = assignment.getRhs() and
+	      readsFieldValue(source, attributeField) and
+	      assignment.getDest().getType().getName() = oldType and
+	      oldType != newType and
+	      usageLoc = assignment.getLocation() and
+	      message = "Assignment expects old type '" + oldType +
+	        "' from attribute '" + attributeField.getName() + "', which will change to '" + newType + "'."
 	    )
+
+	    or
+	    // A field/getter value is passed to a parameter expecting the old type.
+	    exists(MethodCall call, Expr source, int i |
+	      source = call.getArgument(i) and
+	      readsFieldValue(source, attributeField) and
+	      call.getMethod().getParameterType(i).getName() = oldType and
+	      oldType != newType and
+	      usageLoc = call.getLocation() and
+	      message = "Method call expects old type '" + oldType +
+	        "' from attribute '" + attributeField.getName() + "', which will change to '" + newType + "'."
+	    )
+
+	    «IF mode.includesDataFlow»
+	    or
+	    // Experimental local flow: only affected field/getter sources and
+	    // method consumers declared on the old type hierarchy are considered.
+	    exists(Expr source, MethodCall consumer |
+	      readsFieldValue(source, attributeField) and
+	      isOldTypeMethodCall(consumer, attributeField) and
+	      DataFlow::localFlow(
+	        DataFlow::exprNode(source),
+	        DataFlow::exprNode(consumer.getQualifier())
+	      ) and
+	      not readsFieldValue(consumer.getQualifier(), attributeField) and
+	      usageLoc = consumer.getLocation() and
+	      message = "[Potential] Value from attribute '" + attributeField.getName() +
+	        "' flows locally to old-type operation '" + consumer.getMethod().getName() +
+	        "' after conversion to '" + newType + "'."
+	    )
+	    «ENDIF»
 	  )
 	select usageLoc, message
 	'''
 	
-	def static generateAttributePromoteOp(String entityName, String newKeyName)
+	def static generateAttributePromoteOp(String entityName, String newKeyName) {
+		generateAttributePromoteOp(entityName, newKeyName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	def static generateAttributePromoteOp(String entityName, String newKeyName, AnalysisMode mode)
 	'''
 	import java
 	import utils
@@ -453,7 +625,7 @@ class Query {
 	  // field with a @Id annotation
 	  exists(Annotation idAnnotation |
 	    idAnnotation = existingIdField.getAnAnnotation() and
-	    idAnnotation.getType().hasQualifiedName("jakarta.persistence", "Id")
+	    isJpaAnnotation(idAnnotation, "Id")
 	  ) and
 	  
 	  // Nombre del nuevo campo que será parte de la clave compuesta
@@ -468,8 +640,8 @@ class Query {
 	    exists(Annotation annotation |
 	      annotation = existingIdField.getAnAnnotation() and
 	      (
-	        annotation.getType().hasQualifiedName("jakarta.persistence", "Id") or
-	        annotation.getType().hasQualifiedName("jakarta.persistence", "GeneratedValue")
+	        isJpaAnnotation(annotation, "Id") or
+	        isJpaAnnotation(annotation, "GeneratedValue")
 	      ) and
 	      usageLoc = annotation.getLocation() and
 	      message = "Annotation '" + annotation.getType().getName() + "' will be removed as field becomes part of @EmbeddedId."
@@ -542,7 +714,7 @@ class Query {
 	        // joinColumn references 
 	        exists(Annotation joinColumn |
 	          joinColumn = foreignField.getAnAnnotation() and
-	          joinColumn.getType().hasQualifiedName("jakarta.persistence", "JoinColumn") and
+	          isJpaAnnotation(joinColumn, "JoinColumn") and
 	          joinColumn.getValue("referencedColumnName").toString().replaceAll("\"", "") = existingIdField.getName()
 	        )
 	        or
@@ -550,8 +722,11 @@ class Query {
 	        (
 	          foreignField.getType() = entity and
 	          (
-	            foreignField.hasAnnotation("jakarta.persistence", "ManyToOne") or
-	            foreignField.hasAnnotation("jakarta.persistence", "OneToOne")
+	            exists(Annotation association |
+	              association = foreignField.getAnAnnotation() and
+	              (isJpaAnnotation(association, "ManyToOne") or
+	               isJpaAnnotation(association, "OneToOne"))
+	            )
 	          )
 	        )
 	      ) and
@@ -564,7 +739,11 @@ class Query {
 	select usageLoc, message
 	'''
 	
-	def static generateRelationshipRenameOp(String oldTableName, String newTableName)
+	def static generateRelationshipRenameOp(String oldTableName, String newTableName) {
+		generateRelationshipRenameOp(oldTableName, newTableName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	def static generateRelationshipRenameOp(String oldTableName, String newTableName, AnalysisMode mode)
 	'''
 	import java
 	import utils
@@ -580,7 +759,7 @@ class Query {
 	  // search a field with @JoinTable annotation
 	  relationshipField = sourceEntity.getAField() and
 	  exists(Annotation joinTable |
-	    hasJoinTableAnnotation(relationshipField) and
+	    hasJoinTableAnnotation(relationshipField, joinTable) and
 	    joinTable.getValue("name").toString().replaceAll("\"", "") = oldTableName
 	    and
 	    usageLoc = joinTable.getLocation() and
@@ -590,7 +769,11 @@ class Query {
 	select usageLoc, message
 	'''
 	
-	def static generateRelationshipDeleteOp(String deleteTableName)
+	def static generateRelationshipDeleteOp(String deleteTableName) {
+		generateRelationshipDeleteOp(deleteTableName, AnalysisMode.STRUCTURAL_SEMANTIC)
+	}
+
+	def static generateRelationshipDeleteOp(String deleteTableName, AnalysisMode mode)
 	'''
 	import java
 	import utils
@@ -609,13 +792,41 @@ class Query {
 	     message = "Relationship field '" + relationshipField.getName() + "' with database table '" +
 	        relationshipTable + "' will be deleted. " + "Remove all references to this relationship."
 	    )
+
+	    or
+	    // Accessor declarations materialize the domain relationship.
+	    exists(Method accessor |
+	      (isGetter(accessor, relationshipField) or isSetter(accessor, relationshipField)) and
+	      usageLoc = accessor.getLocation() and
+	      message = "Accessor '" + accessor.getName() + "' exposes relationship '" +
+	        relationshipField.getName() + "' which will be deleted."
+	    )
+
+	    or
+	    // Calls are linked to the resolved accessor, not merely its name.
+	    exists(MethodCall accessorCall |
+	      callsAccessor(accessorCall, relationshipField) and
+	      usageLoc = accessorCall.getLocation() and
+	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
+	        "' depends on relationship '" + relationshipField.getName() + "' which will be deleted."
+	    )
+
+	    or
+	    // Direct field reads/writes, including collection operations through it.
+	    exists(FieldAccess access |
+	      access.getField() = relationshipField and
+	      not isAccessInsideAccessor(access, relationshipField) and
+	      usageLoc = access.getLocation() and
+	      message = "Direct access depends on relationship '" + relationshipField.getName() +
+	        "' which will be deleted."
+	    )
 	    
 	    or
 	    // Mappings on the other side of the relationship (mappedBy)
 	    exists(Field mappedField, Annotation mappedBy |
 	      mappedBy = mappedField.getAnAnnotation() and
-	      isRelationshipField(mappedField) and
-	      mappedBy.getValue("mappedBy").toString().replaceAll("\"", "") = relationshipField.getName() and
+	      isJpaAssociationAnnotation(mappedBy) and
+	      isRelatedField(relationshipField, mappedField) and
 	      usageLoc = mappedBy.getLocation() and
 	      message =
 	        "Field '" + mappedField.getName() + "' references relationship '" +
