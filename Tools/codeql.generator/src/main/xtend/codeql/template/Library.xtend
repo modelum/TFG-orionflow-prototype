@@ -1,6 +1,22 @@
 package codeql.template
 
 class Library {
+	def static CharSequence generateUsesOldEntity(String entityName)
+	'''
+	/**
+	 * Check if the entity «entityName» is used in a JPQL query
+	 */
+	predicate usesOldEntity(StringLiteral queryValue) {
+	  queryValue.getValue().regexpMatch(
+	    "(?i).*\\b(FROM|UPDATE|DELETE\\s+FROM)\\s+«entityName»\\b.*"
+	  )
+	  or
+	  queryValue.getValue().regexpMatch(
+	    "(?i).*\\bJOIN\\s+(?:FETCH\\s+)?«entityName»\\b.*"
+	  )
+	}
+	'''
+
 	def static CharSequence generateUtils()
 	'''
 	import java
@@ -74,19 +90,6 @@ class Library {
 	      )
 	    )
 	  )
-	}
-	
-	/** 
-	 * Check if a entity is used in a JPQL query
-	 */
-    predicate usesOldEntity(StringLiteral queryValue, Class parent) {
-  		queryValue.getValue().regexpMatch(
-   				 "(?i).*\\b(FROM|UPDATE|DELETE\\s+FROM)\\s+" + parent.getName() + "\\b.*"
-  		)
-  		or
- 		queryValue.getValue().regexpMatch(
-    			"(?i).*\\bJOIN\\s+(?:FETCH\\s+)?" + parent.getName() + "\\b.*"
-  		)
 	}
 	
 	/**

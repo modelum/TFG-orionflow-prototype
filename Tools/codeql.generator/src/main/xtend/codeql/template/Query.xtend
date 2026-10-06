@@ -6,6 +6,8 @@ class Query {
 		'''
 		import java
 		import utils
+
+		«Library.generateUsesOldEntity(entityName)»
 		
 		from Class entity, Location usageLoc, string message
 		where
@@ -37,7 +39,7 @@ class Query {
 		      isNamedQuery(nq) and
 		      isEqual(nq.getValue("name"), q.getValue("name")) and
 		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral, entity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Named query uses entity '" + entity.getName() +
@@ -49,7 +51,7 @@ class Query {
 		    exists(Annotation q, StringLiteral queryLiteral |
 		      isQuery(q) and
 		      queryLiteral = q.getValue("value") and
-		      usesOldEntity(queryLiteral, entity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Query uses entity '" + entity.getName() +
@@ -61,7 +63,7 @@ class Query {
 		    exists(MethodCall call, StringLiteral queryLiteral |
 		      isCreateQuery(call) and
 		      queryLiteral = call.getArgument(0) and
-		      usesOldEntity(queryLiteral, entity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createQuery uses entity '" + entity.getName() +
@@ -77,7 +79,7 @@ class Query {
 		      isNamedQuery(nq) and
 		      "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
 		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral, entity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createNamedQuery uses entity '" + entity.getName() +
@@ -92,6 +94,8 @@ class Query {
 		'''
 		import java
 		import utils
+
+		«Library.generateUsesOldEntity(oldEntityName)»
 		
 		from Class oldEntity, Location usageLoc, string message, string newName
 		where
@@ -125,7 +129,7 @@ class Query {
 		      isNamedQuery(nq) and
 		      isEqual(nq.getValue("name"), q.getValue("name")) and
 		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral, oldEntity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Named query uses old entity name '" + oldEntity.getName() +
@@ -137,7 +141,7 @@ class Query {
 		    exists(Annotation q, StringLiteral queryLiteral |
 		      isQuery(q) and
 		      queryLiteral = q.getValue("value") and
-		      usesOldEntity(queryLiteral, oldEntity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Query uses old entity name '" + oldEntity.getName() +
@@ -149,7 +153,7 @@ class Query {
 		    exists(MethodCall call, StringLiteral queryLiteral |
 		      isCreateQuery(call) and
 		      queryLiteral = call.getArgument(0) and
-		      usesOldEntity(queryLiteral, oldEntity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createQuery uses old entity name '" + oldEntity.getName() +
@@ -165,7 +169,7 @@ class Query {
 		      isNamedQuery(nq) and
 		      "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
 		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral, oldEntity) and
+		      usesOldEntity(queryLiteral) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createNamedQuery uses old entity name '" + oldEntity.getName() +
