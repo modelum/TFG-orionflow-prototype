@@ -69,10 +69,15 @@ class QueryGenerationTest {
 
         assertTrue(library.contains("hasQualifiedName(\"jakarta.persistence\", simpleName)"));
         assertTrue(library.contains("hasQualifiedName(\"javax.persistence\", simpleName)"));
+<<<<<<< HEAD
         assertTrue(library.contains("creation.getConstructedType() = entity"));
         assertTrue(library.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
         assertTrue(library.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
         assertFalse(library.contains("creation.fromSource()"));
+=======
+        assertTrue(library.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
+        assertTrue(library.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
+>>>>>>> 3b7b502ab428b2fdaa3335ad40dee221f0414d8c
         assertFalse(library.contains("regexpMatch(\"(?i).*\\\\b\" + entity.getName()"));
         assertFalse(library.contains("regexpMatch(\"(?i).*\\\\b\" + field.getName()"));
     }

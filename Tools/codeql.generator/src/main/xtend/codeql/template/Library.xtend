@@ -146,6 +146,10 @@ class Library {
 
 	/** A constructor expression resolved to the affected entity. */
 	predicate constructsEntity(ClassInstanceExpr creation, Class entity) {
+<<<<<<< HEAD
+=======
+	  creation.fromSource() and
+>>>>>>> 3b7b502ab428b2fdaa3335ad40dee221f0414d8c
 	  creation.getConstructedType() = entity
 	}
 
