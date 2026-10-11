@@ -22,11 +22,24 @@ import util.FileWriterUtil;
 public class Orion2CodeQLMain {
 
     public static void main(String[] args) {
+        Orion2CodeQLConfig config;
+        try {
+            config = new Orion2CodeQLConfig(args);
+        } catch (IllegalArgumentException exception) {
+            System.err.println("<OrionFlow CodeQL Generator> ERROR: " + exception.getMessage());
+            new Orion2CodeQLConfig(new String[] { "--help" }).printHelp();
+            System.exit(1);
+            return;
+        }
+
+        if (config.isHelpRequested()) {
+            config.printHelp();
+            return;
+        }
+
         Injector injector = createInjector();
         registerFactory(injector);
         registerPackage();
-
-        Orion2CodeQLConfig config = new Orion2CodeQLConfig(args);
         runAnalyzer(config, injector);
     }
     
@@ -66,11 +79,11 @@ public class Orion2CodeQLMain {
     private static void runAnalyzer(Orion2CodeQLConfig config, Injector injector) {
         try {
             var orionOps = loadAst(config, injector);
-            Map<String, String> results = new Orion2CodeQL(config.getAnalysisMode()).m2t(orionOps);
+            Map<String, String> results = new Orion2CodeQL(config.getFramework()).m2t(orionOps);
             writeResults(config, results);
-            System.out.println("<SpringDataJPA CodeQL Generator> Transformation completed successfully!");
+            System.out.println("<OrionFlow CodeQL Generator> Transformation completed successfully!");
         } catch (Exception e) {
-            System.err.println("<SpringDataJPA CodeQL Generator> ERROR: " + e.getMessage());
+            System.err.println("<OrionFlow CodeQL Generator> ERROR: " + e.getMessage());
             System.exit(1);
         }
     }

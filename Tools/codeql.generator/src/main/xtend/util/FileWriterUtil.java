@@ -6,7 +6,7 @@ import java.io.IOException;
 
 public class FileWriterUtil {
 	
-	private static final String PREFIX = "<SpringDataJPA CodeQL Generator>";
+	private static final String PREFIX = "<OrionFlow CodeQL Generator>";
 
     public static void writeToFile(String filePath, String content) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {

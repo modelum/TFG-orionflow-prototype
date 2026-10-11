@@ -1,19 +1,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
-                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>ModelUM</groupId>
   <artifactId>SpringDataJPA.predictor</artifactId>
-  <version>2.0.0</version>
+  <version>3.0.0</version>
   <packaging>jar</packaging>
 
   <properties>
     <maven.compiler.source>11</maven.compiler.source>
     <maven.compiler.target>11</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties> 
+  </properties>
 
   <dependencies>
     <!-- EMF -->
@@ -92,25 +91,25 @@
         </executions>
       </plugin>
 
-         <plugin>
-           <groupId>org.codehaus.mojo</groupId>
-           <artifactId>build-helper-maven-plugin</artifactId>
-           <version>3.5.0</version>
-           <executions>
-             <execution>
-               <id>add-generated-sources</id>
-               <phase>generate-sources</phase>
-               <goals>
-                 <goal>add-source</goal>
-               </goals>
-               <configuration>
-                 <sources>
-                   <source>${project.basedir}/src/main/xtend-gen</source>
-                 </sources>
-               </configuration>
-             </execution>
-           </executions>
-         </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>add-generated-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${project.basedir}/src/main/xtend-gen</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
 
       <!-- 2) Java compiler: incluye el directorio xtend-gen -->
       <plugin>
@@ -154,10 +153,12 @@
                 </filter>
               </filters>
               <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>main.Orion2CodeQLMain</mainClass>
                 </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
               </transformers>
             </configuration>
           </execution>

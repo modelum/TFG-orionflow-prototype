@@ -1,63 +1,58 @@
 # OrionFlow V2 coverage matrix
 
-Legend: **Current support** describes the immutable V1 baseline. **V2 target**
-records the implemented target except where the cell explicitly says deferred
-or research target. “Semantic” means resolved framework or ORM semantics rather
-than unrestricted text matching.
+This matrix describes the current generated predicates. “Local DataFlow” means
+the source/sink-constrained helpers in `orion_dataflow.qll`; it does not mean
+global flow or taint tracking.
 
-| SCO | Code construct | Current support | V2 target | Detection mechanism |
-|---|---|---:|---:|---|
-| Rename/Delete Entity | JPA entity declaration | Yes | Yes | AST + JPA annotation |
-| Rename/Delete Entity | Ordinary field type | Partial: associations only | Yes | Resolved `TypeAccess` |
-| Rename/Delete Entity | Generic type argument | No | Yes | Resolved nested `TypeAccess` |
-| Rename/Delete Entity | Parameter type | No | Yes | Resolved `TypeAccess` |
-| Rename/Delete Entity | Return type | No | Yes | Resolved `TypeAccess` |
-| Rename/Delete Entity | Local variable type | No | Yes | Resolved `TypeAccess` |
-| Rename/Delete Entity | `new Entity()` | No | Yes | `ClassInstanceExpr` + resolved type |
-| Rename/Delete Entity | Base class/interface | No | Yes | Resolved `TypeAccess` |
-| Rename/Delete Entity | Repository generic | No | Yes | Resolved generic `TypeAccess` |
-| Rename/Delete Entity | JPA association | Partial | Yes | Type resolution + dual JPA namespace |
-| Rename/Delete Entity | Static JPQL/EntityManager | Yes | Yes | Static literal regex + annotation/API semantics |
-| Rename/Delete Entity | Dynamic JPQL | No | Out of current scope | Potential future taint tracking |
-| Rename/Delete Feature | Field declaration | Yes | Yes | Resolved field |
-| Rename/Delete Feature | Getter/setter declaration | Partial | Yes | Name + signature + owner |
-| Rename/Delete Feature | Direct field access | Yes | Yes | Resolved `FieldAccess` |
-| Rename/Delete Feature | Getter/setter call | No | Yes | Resolved `MethodCall.getMethod()` |
-| Rename/Delete Feature | `mappedBy` reference | No | Yes | JPA annotation semantics |
-| Rename/Delete Feature | Column/join-column metadata | No | Yes | JPA annotation semantics |
-| Rename/Delete Feature | Spring validation property | No | Yes, conservative | Framework method + entity parameter + exact literal |
-| Rename/Delete Feature | Spring Data derived query | No | Yes, conservative | Repository generic + generated static name regex |
-| Rename/Delete Feature | Static JPQL | Yes | Yes | Generated literal regex |
-| Delete Relationship | Owning mapping/field | Yes | Yes | `@JoinTable` + association field |
-| Delete Relationship | Opposite `mappedBy` | Yes | Yes | JPA annotation semantics |
-| Delete Relationship | Accessor declarations/calls | No | Yes | Resolved methods/calls |
-| Delete Relationship | Direct/collection use | No | Yes | Resolved field/accessor calls |
-| Delete Relationship | Static JPQL | Yes | Yes | Static captures + resolved field |
-| Rename Relationship | `@JoinTable(name=...)` | Yes | Yes | Exact annotation value |
-| Rename Relationship | Accessors/domain field | Intentionally No | No | Not affected by physical rename |
-| Cast Attribute/Reference | Field declaration | Yes | Yes | Resolved field |
-| Cast Attribute/Reference | Accessor declaration | Yes | Yes | Name + signature + owner |
-| Cast Attribute/Reference | Accessor invocation | No | Yes | Resolved call |
-| Cast Attribute/Reference | Initialization/assignment | Partial | Yes | AST + resolved expression type |
-| Cast Attribute/Reference | Old-type method consumer | No | Yes | AST in semantic mode; local flow in dataflow mode |
-| Cast Attribute/Reference | Local propagation | No | Experimental | Local `DataFlow::localFlow` |
-| Cast Attribute/Reference | Interprocedural propagation | No | Deferred | Global DataFlow only after evidence |
-| Move Feature | Source declaration/access | Partial | Yes | Reused feature rules + lineage |
-| Move Feature | New-owner navigation rewrite | No | Research target | Semantic navigation; possible local flow |
-| Promote Attribute | Identifier declaration/annotations | Yes | Yes | AST + JPA semantics |
-| Promote Attribute | Multiple promoted fields | Partial | Later V2 | Per-feature query generation |
-| All relevant SCOs | `jakarta.persistence` | Yes | Yes | Semantic annotation/API predicates |
-| All relevant SCOs | `javax.persistence` | No | Yes | Semantic annotation/API predicates |
-| All relevant SCOs | Comments/similar variable names | No | No | Explicitly excluded |
-| All relevant SCOs | Arbitrary strings | No | No | Only explicit framework/JPQL roles |
+## SCO coverage
 
-## Mode allocation
+| SCO | Structural Java | JPA adapter | MongoDB adapter | Local DataFlow |
+|---|---|---|---|---|
+| Rename Entity | Entity declaration, resolved `TypeAccess`, construction, typed fields, inheritance, repository type references | `@Entity`/`@Table`, associations, static JPQL, Spring Data JPA `@Query`, named queries, EntityManager | `@Document`, Java/stored collection names, Spring Data Mongo `@Query`, `MongoOperations` collection arguments | No |
+| Delete Entity | Same source-code bindings as Rename Entity | Same JPA entity/query coverage | Same MongoDB document/query/collection coverage | No |
+| Split Entity | Source-side entity deletion impact using preserved lineage | Selected JPA semantics | Selected MongoDB semantics | No |
+| Rename Feature | Field declaration, direct access, accessor declaration and resolved calls | `@Column`, `@JoinColumn`, `mappedBy`, static JPQL, validation properties, derived repository methods | Java and `@Field` names, `@Indexed`/`@CompoundIndex`, JSON query text, Criteria/Update/aggregation field APIs, validation properties, derived repository methods | No |
+| Delete Feature | Same structural and framework bindings as Rename Feature | Same JPA feature semantics | Same MongoDB feature semantics | Yes: field/getter value to dependent call |
+| Move Feature | Source field/access/accessor impact plus target-owner context | Source-side JPA feature metadata/query impact | Source-side MongoDB Java/stored-name metadata/query impact | Yes: source field/getter value to dependent call |
+| Cast Attribute | Field/accessor declarations and calls, initializers, assignments, arguments, direct old-type consumers | Framework metadata associated with the field | Framework metadata and typed field-name APIs | Yes: old value to old-type consumer |
+| Cast Reference | Reference field/accessor declarations and calls, assignments and consumers | Association plus `JoinColumn`/`JoinColumns`/`JoinTable` mapping | `@DBRef`/`@DocumentReference` mapping | Yes: old reference to old-type consumer |
+| Promote Attribute | Existing identifier declaration and annotation impact | `@Id`, `@EmbeddedId`, `@GeneratedValue`, join-column bindings | `@Id` and `@MongoId` | No |
+| Rename Relationship | Mapping annotation containing the physical relationship name | `@JoinTable` and direct/nested `@JoinColumn` names, including `referencedColumnName` | `@Field` stored name and Mongo reference mapping | No |
+| Delete Relationship | Relationship field, related side, accessors/calls, direct and query use | JPA association and `mappedBy` semantics | `@DBRef`/`@DocumentReference`, related fields, Java/stored query names | Yes: relationship collection to collection/map mutation |
 
-| Mechanism | STRUCTURAL | STRUCTURAL_SEMANTIC | DATAFLOW |
-|---|---:|---:|---:|
-| Resolved Java declarations/types/accesses/calls | Yes | Yes | Yes |
-| JPA/JPQL/Spring-aware rules | Existing compatibility subset | Yes | Yes |
-| Local value propagation to type-dependent sinks | No | No | Yes |
-| Global DataFlow | No | No | Not enabled initially |
-| Taint tracking for dynamic queries | No | No | Not enabled initially |
+## Persistence semantics
 
+| Construct | JPA | MongoDB |
+|---|---:|---:|
+| Entity/document declaration | `jakarta.persistence.Entity`, `javax.persistence.Entity` | `@Document` |
+| Explicit persisted type name | `@Entity(name=...)`, table metadata where applicable | `@Document(collection=...)` or `value` |
+| Identifier | `@Id`, `@EmbeddedId` | Spring Data `@Id`, `@MongoId` |
+| Reference mapping | `ManyToOne`, `OneToOne`, `OneToMany`, `ManyToMany`, join columns/tables | `@DBRef`, `@DocumentReference` |
+| Logical versus stored field name | Java field and JPA metadata | Java field and `@Field(value/name)` |
+| Query annotations | Spring Data JPA `@Query`, JPA `@NamedQuery` | Spring Data MongoDB `@Query` |
+| Programmatic query APIs | `EntityManager.createQuery/createNamedQuery` | `MongoOperations`, `Criteria.where`, `Update`, aggregation field methods |
+| Index metadata | Not modelled as a feature-name source | `@Indexed`, `@CompoundIndex`, `@CompoundIndexes` |
+| Repository-derived methods | Spring Data repository domain binding plus generated method-name pattern | Same shared repository rule, bound to a Mongo document |
+
+## Framework selection
+
+| CLI selection | Generated persistence modules | Facade behavior |
+|---|---|---|
+| omitted or `--framework jpa` | `orion_jpa.qll` | JPA predicates only |
+| `--framework mongo` | `orion_mongo.qll` | MongoDB predicates only |
+| `--framework both` | `orion_jpa.qll`, `orion_mongo.qll` | Union of both adapters; structural modules remain singletons |
+
+## Deliberate boundaries
+
+- Orion-known entity and feature names are generated as literals. Generic
+  query helpers use constant captures followed by semantic equality.
+- Static JPQL and MongoDB JSON/query strings are covered by a bounded grammar;
+  this is not a complete JPQL, JSON, or aggregation parser.
+- Dynamically assembled query text, native SQL, reflective access, and arbitrary
+  strings are not treated as schema references.
+- Local DataFlow is enabled only for the five SCOs in the first table. Global
+  DataFlow and taint tracking are not enabled.
+- Rename Relationship targets physical mapping names; it intentionally does not
+  report unrelated domain accessor names.
+- Same-named entities in different packages remain limited by Orion selectors
+  that supply only a simple entity name.

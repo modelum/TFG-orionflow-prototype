@@ -1,90 +1,98 @@
 # OrionFlow V2 changelog
 
-## Generator and configuration
+## Modular query libraries
 
-- Added `STRUCTURAL`, `STRUCTURAL_SEMANTIC`, and `DATAFLOW` analysis modes.
-- Added `-m` / `--mode`; omission defaults to `STRUCTURAL_SEMANTIC`.
-- Kept every previous public `Query.generate...` signature as a compatibility
-  overload.
-- Propagated the mode through `Orion2CodeQL` without changing SCO dispatch or
-  generated query IDs.
-- Bound Xtend compilation and JUnit 5 to the normal Maven lifecycle.
+- Split the generated library into `orion_java.qll`, `orion_spring.qll`,
+  `orion_jpa.qll`, `orion_mongo.qll`, and `orion_dataflow.qll`.
+- Retained `utils.qll` as the stable facade imported by operation queries.
+- Added adapter-aware composition: JPA, MongoDB, or both can be emitted without
+  duplicating the Java structural core.
+- Kept names known during Orion generation as regular-expression literals and
+  replaced AST-name-dependent patterns with constant captures plus equality.
 
-## Impact detection
+## Configuration and compatibility
 
-- Rename/Delete Entity now reports resolved source `TypeAccess` nodes across
-  fields, generic arguments, parameters, returns, locals, inheritance, and
-  repository declarations, plus resolved construction expressions.
-- Rename/Delete Feature now emits an Orion-specific `usesField` predicate,
-  validates accessor signatures, and resolves external getter/setter calls.
-- Embedded-field matching is restricted to containers owned by the affected
-  entity.
-- Delete Relationship now includes accessor declarations/calls, direct field
-  use, collection use through the accessor, and opposite `mappedBy` metadata.
-- Rename Relationship remains deliberately restricted to the physical
-  `@JoinTable(name=...)` value.
-- Cast Attribute/Reference now covers resolved accessor calls, old-type direct
-  consumers, initializers, assignments, and method arguments. DATAFLOW adds a
-  source/sink-constrained local flow and labels its findings `[Potential]`.
+- Added `PersistenceFramework` with `jpa`, `mongo`, and `both`; JPA is the
+  default when `--framework`/`-f` is omitted.
+- Added an immutable generation profile for persistence-adapter selection.
+- Removed `AnalysisMode` and `-m`/`--mode`; V2 always composes structural,
+  selected framework semantics, and SCO-specific DataFlow.
+- Retained only `-a ALL`/`--analysis ALL` as a deprecated no-op compatibility
+  alias. Other analysis values are rejected.
+- Made help usable without an input file and retained the current directory as
+  the default output location.
 
-## JPA and Spring semantics
+## Structural Java detection
 
-- Centralized dual `jakarta.persistence` / `javax.persistence` matching.
-- Generalized association support to `ManyToOne`, `OneToOne`, `OneToMany`, and
-  `ManyToMany`.
-- Added `@Column`, `@JoinColumn`, and `mappedBy` feature metadata rules.
-- Added exact first-argument Spring `Errors` property handling, constrained to
-  a callable that receives the affected entity.
-- Added conservative Spring Data derived-query matching constrained by the
-  repository's resolved entity type.
-- Removed a hard-coded `VideoPost` inheritance condition.
+- Centralized resolved Java type references, constructor expressions, typed
+  fields, JavaBeans accessors, resolved accessor calls, and type-dependent
+  consumers in `orion_java.qll`.
+- Removed the incompatible `creation.fromSource()` call from
+  `ClassInstanceExpr`. `constructsEntity` now preserves the semantic condition
+  `creation.getConstructedType() = entity`, which is valid for the target
+  CodeQL Java library.
+- Kept `TypeAccess.fromSource()` only on `TypeAccess`, where the API exists.
 
-## Performance safeguards
+## Persistence adapters
 
-- Entity/feature JPQL regexes contain generation-time Orion literals.
-- Generic helpers use constant capture regexes followed by equality; they do
-  not concatenate AST-derived names into regex patterns.
-- Structural symbol equality is preferred over textual type/name matching.
-- Local DataFlow is absent from generated output unless explicitly selected.
+- Moved dual `jakarta.persistence`/`javax.persistence`, JPQL, EntityManager,
+  association, metadata, and physical join-name logic into `orion_jpa.qll`.
+- Corrected relationship mapping so JPA physical names can be resolved through
+  `@JoinTable`, direct `@JoinColumn`, nested join/inverse-join columns, and
+  `referencedColumnName`.
+- Added `orion_mongo.qll` for Spring Data MongoDB:
+  - `@Document` and explicit collection names;
+  - Java field names and `@Field` stored names;
+  - `@Id`/`@MongoId`, `@DBRef`, and `@DocumentReference`;
+  - `@Indexed`, `@CompoundIndex`, and `@CompoundIndexes`;
+  - repository query strings and derived methods;
+  - `MongoOperations`, `Criteria`, `Update`, and aggregation field-name APIs.
+- Extracted persistence-independent Spring validation and repository-domain
+  binding into `orion_spring.qll`.
 
-## Tests and evaluation support
+## SCO generation
 
-- Added 13 JUnit tests for mode parsing, query generation, lineage, and
-  end-to-end Orion-to-query generation.
-- Added a compilable Java/JPA/Spring fixture project with positive/negative
-  cases for homonyms, generics, inheritance, overloads, accessors, JPQL, JPA,
-  relationships, framework properties, and local flow.
-- Added a verification runner that can create a fixture CodeQL database,
-  compile queries, evaluate suites, retain raw SARIF, and record timings when a
-  CLI is installed.
-- Added a deterministic SARIF/ground-truth comparison script and CSV schema.
+- Split the former monolithic query template into `EntityQuery`, `FeatureQuery`,
+  `AttributeQuery`, and `RelationshipQuery`.
+- Generated entity and field query predicates with Orion names embedded at
+  generation time, avoiding the prior dynamic-regex performance pathology.
+- Added dedicated query generation for Move Feature and Cast Reference instead
+  of routing them through a different SCO template.
+- Added MongoDB-aware Java/stored-name checks to entity, feature, relationship,
+  cast, move, and promotion queries.
+- Restricted DataFlow to Delete Feature, Cast Attribute, Cast Reference, Move
+  Feature, and Delete Relationship. These queries use local, field-bound
+  source/sink predicates and label flow-only findings as potential.
 
-## Compatibility and provenance
+## Evolution sequencing
 
-- `EvolutionContext.xtend` was not modified. Regression tests confirm that an
-  entity rename followed by a feature rename still queries the original source
-  identifiers.
-- `utils.qll`, `.ql`, `suite.qls`, and `codeql-pack.yml` output layout is
-  preserved.
-- No generated Java source was edited as source of truth.
-- No PetClinic/OpenMRS file, deployed generator JAR, remote branch, or ground
-  truth was changed.
+- Added stable logical identities for entities (`E…`), features (`F…`), and
+  relationships (`R…`).
+- Preserved those identities through entity/feature/relationship renames and
+  feature moves.
+- Added tombstones for deleted entities, features, and relationships so their
+  original source identifiers remain resolvable during a chained evolution.
+- Reset generator state for each transformation and process evolution blocks
+  in source order.
 
-## Known limitations
+## Tests and current validation
 
-- The current environment has no CodeQL CLI/database, so generated QL syntax
-  and query results are not yet execution-validated.
-- Orion entity selectors expose simple names, leaving same-named JPA entities
-  in different packages ambiguous.
-- JPQL detection covers static literals and a bounded grammar, not a complete
-  JPQL parser, Criteria API, native SQL, or dynamically assembled queries.
-- Spring property modeling covers a conservative set of `Errors` methods and
-  does not treat arbitrary strings as schema references.
-- Derived-query parsing is intentionally bounded and does not model every
-  Spring Data keyword or nested-property ambiguity.
-- Cast compatibility currently identifies old-type-dependent categories; it
-  does not prove that every consumer is absent on the new type.
-- Global DataFlow and taint tracking remain disabled pending precision and
-  performance evidence.
-- Move Feature still reuses source-side deletion impact; Promote Attribute
-  still treats multiple comma-joined promoted names as a known limitation.
+- Extended tests for framework parsing/composition, modular generation,
+  framework-specific query content, selected DataFlow, dedicated move/reference
+  templates, and chained/tombstoned evolution identities.
+- Added Java/JPA/Spring and Spring Data MongoDB fixture coverage.
+- The Maven test lifecycle passes.
+- The current integration script generates 16 operation queries for each of the
+  JPA, MongoDB, and `both` profiles; the no-flag profile is equivalent to JPA.
+- The compatibility work used CodeQL CLI 2.27.2 and `codeql/java-all` 9.3.2.
+  A partial compilation was completed before the final modular pass; complete
+  compilation of all current profiles and query evaluation remain in progress.
+
+## Scope safeguards
+
+- No generated Java file is treated as source of truth; source changes live in
+  Xtend/Java generator sources.
+- No workflow, deployed generator JAR, application ground truth, or analysed
+  PetClinic/OpenMRS source is changed by this refactoring.
+- Global DataFlow, taint tracking, complete JPQL/JSON parsing, and dynamic query
+  reconstruction remain outside the current scope.

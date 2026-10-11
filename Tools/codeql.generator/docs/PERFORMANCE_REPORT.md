@@ -1,89 +1,118 @@
-# OrionFlow V2 performance report
+# OrionFlow V2 performance and validation report
 
-## Scope and environment
+## Current status
 
-Measurements in this document were taken on 2026-10-09 on the local Windows
-workspace with JDK 11 and Maven 3.9.9. The measured input was
-`model/Prueba.orion`, which produces 11 operation queries plus `utils.qll`, the
-suite, and pack metadata (14 files total).
+This report deliberately separates generator verification from CodeQL query
+compilation and evaluation. A passing Maven build proves that the generator and
+its tests compile and run; it does not prove that every generated QL query
+compiles or produces the expected alerts.
 
-No `codeql` executable, CodeQL database, or raw SARIF result was available.
-Consequently, database build, QL compilation, QL evaluation, workflow time,
-and alert counts are explicitly not reported as V2 measurements. Generator
-time is not used as a proxy for any of them.
+Verified facts for the current modular refactoring:
 
-## Reproducible local measurements
+| Check | Result |
+|---|---|
+| Maven test lifecycle | Passes |
+| Default persistence profile | JPA |
+| Generated operation queries, JPA profile | 16 |
+| Generated operation queries, MongoDB profile | 16 |
+| Generated operation queries, `both` profile | 16 |
+| Target CodeQL CLI | 2.27.2 |
+| Target Java QL pack | `codeql/java-all` 9.3.2 |
+| Compatibility compilation | Partial earlier pass completed |
+| Final compilation of all current modular profiles | In progress |
+| Query evaluation and result validation | In progress |
 
-| Activity | Result | What it establishes |
-|---|---:|---|
-| `mvn clean test` | 11.223 s Maven time | Xtend/Java compilation and 13 tests |
-| Runner build/test stage | 12.451 s wall | Same clean test stage measured externally |
-| Runner package stage | 13.415 s wall | Shaded generator JAR after the test stage |
-| Fixture `mvn clean test` | 3.226 s wall | Eight Java/JPA/Spring fixture sources compile |
-| Generate `STRUCTURAL` | 1.270 s | 10 fixture query/metadata files |
-| Generate `STRUCTURAL_SEMANTIC` | 1.355 s | 10 fixture query/metadata files |
-| Generate `DATAFLOW` | 1.368 s | 10 fixture query/metadata files |
+No elapsed time, alert count, or speedup is reported for the current modular
+version until the corresponding command has completed and its raw output has
+been retained.
 
-The final runner measurements use `codeql-fixtures.orion`; an earlier smoke run
-of `model/Prueba.orion` produced its 14 files in 1.341--1.418 s. These are
-single runs and should not be treated as a statistically stable benchmark. They
-show that mode selection does not add material generator overhead; the
-important unknown remains CodeQL evaluation.
+## Performance safeguards in the generator
 
-The shaded build reports pre-existing overlapping EMF resources/classes and
-the Java 11 run reports Guice illegal reflective access. Neither warning
-prevented the build or generation, but dependency convergence is separate
-technical debt.
+The generated code avoids the performance issue observed when a regular
+expression is built from an AST-derived `Class.getName()` or `Field.getName()`:
 
-## Dynamic-regex regression
+- Entity and feature names available from Orion are embedded as literals while
+  generating the QL file.
+- Reusable framework predicates use constant regular expressions, capture a
+  candidate name, and compare that value to a semantically resolved declaration.
+- Java references prefer CodeQL symbol/type equality over textual matching.
+- `both` mode emits `orion_java.qll` and `orion_spring.qll` once and combines
+  only the adapter predicates in `utils.qll`.
+- DataFlow uses `DataFlow::localFlow`, with an affected-field source and a
+  SCO-specific sink. It is imported only by Delete Feature, Cast Attribute,
+  Cast Reference, Move Feature, and Delete Relationship queries.
+- Global DataFlow and taint tracking are not enabled.
 
-Entity and feature names known from Orion are embedded in generated predicates
-by `generateUsesOldEntity` and `generateUsesField`. The remaining generic JPQL
-helpers use constant regexes, capture identifiers, and compare the captures to
-resolved declarations. A source/output scan found no regex constructed by
-concatenating `Class.getName()` or `Field.getName()` into its pattern.
+These are design safeguards, not benchmark results.
 
-This preserves the optimization motivated by the earlier user-provided OpenMRS
-observation:
+## Measurement table
 
-| Observation supplied before V2 | Time |
-|---|---:|
-| Workflow with AST-dependent entity regex | 50 min 54 s |
-| Workflow with literal `Visit` regex | 3 min 48 s |
-| Build in the literal run | 1 min 45 s |
-| Query compilation in the literal run | 20.4 s |
-| Query evaluation in the literal run | 6 s |
+Complete this table from retained command output. Do not replace “Pending” with
+an estimate.
 
-Those figures were not rerun in this workspace and are not V2 experimental
-results. They are retained only as regression motivation.
+| Profile | Generator wall time | QL compile wall time | Queries compiled | Evaluation wall time | Raw alerts | Normalized alerts | Status/notes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| JPA | Pending | Pending | Pending | Pending | Pending | Pending | Final modular validation in progress |
+| MongoDB | Pending | Pending | Pending | Pending | Pending | Pending | Final modular validation in progress |
+| Both | Pending | Pending | Pending | Pending | Pending | Pending | Final modular validation in progress |
 
-## CodeQL measurement protocol
+For application-level campaigns, add one row per commit/database and record the
+database creation time separately from query compilation and evaluation.
 
-`scripts/verify-v2.ps1` builds/tests the generator, compiles the fixture
-project, emits all three modes, and records `performance.json`. When `codeql`
-is available it also installs each generated pack and compiles every query. An
-existing database can be passed with `-CodeqlDatabase`; alternatively,
-`-CreateFixtureDatabase` builds a small fixture database. Raw SARIF is retained
-inside each mode directory.
+## Reproducible validation protocol
 
-For PetClinic/OpenMRS runs, record separately:
+Use JDK 11 for the generator build. Validate the generated packs with the exact
+target versions, CodeQL CLI 2.27.2 and `codeql/java-all` 9.3.2.
 
-1. Database creation wall time and commit under analysis.
-2. Pack installation/query compilation wall time.
-3. Query evaluation wall time per query and for the suite.
-4. Complete workflow wall time.
-5. Raw and normalized alert count.
-6. Warm/cold cache state, CodeQL version, hardware, JDK, and repetitions.
+The repository verifier executes the build, fixture compilation, generation,
+pack installation, query compilation, evaluation, and measurement sequence:
 
-Any query whose median evaluation time exceeds three times its V1 counterpart
-must be investigated. The decision should also consider coverage benefit and
-run-to-run variance; the ratio is a trigger, not an absolute rejection limit.
+```powershell
+.\scripts\verify-v2.ps1 `
+  -CodeqlExe C:\tools\codeql\codeql.exe `
+  -CodeqlPacks C:\tools\codeql-bundle\qlpacks
+```
 
-## Current blockers
+The paths are examples; the script rejects a CLI or Java QL pack whose version
+does not match the target and resolves the packaged JAR identity from
+`pom.xml`. It also applies the fixture oracle in
+[`EXPECTATIONS.md`](../src/test/resources/fixtures/EXPECTATIONS.md): default
+and explicit JPA must be identical, adapter results must remain isolated,
+`both` must be the exact normalized union, duplicate identities are rejected,
+and the required positive/negative locations are checked.
 
-- Generated QL has been structurally inspected and its APIs checked against
-  the official Java library documentation, but it has not been compiled by a
-  CodeQL CLI in this environment.
-- Query evaluation, result counts, and SARIF correctness remain unvalidated.
-- No formal PetClinic or OpenMRS campaign was launched, and neither repository
-  nor its deployed generator JAR was modified.
+1. Run `mvn clean test` and retain the Surefire summary.
+2. Run `mvn clean package` and generate three fresh output directories from the
+   same Orion input: `--framework jpa`, `mongo`, and `both`.
+3. Confirm that each profile has the same expected set of 16 operation queries
+   and that only its selected adapter modules are present.
+4. Install/resolve the pack dependencies in the target CodeQL environment.
+5. Compile every generated `.ql` file with `codeql query compile --check-only
+   --keep-going`; retain stdout/stderr and elapsed time per profile.
+6. Evaluate the same queries against the same CodeQL database and retain raw
+   BQRS/SARIF before normalization.
+7. Normalize results by query ID, fixture-relative file, full region, and
+   message before comparing profiles or ground truth.
+8. Record cache state, database commit, OS/hardware, JDK, CLI/pack versions, and
+   the number of repetitions.
+
+## Compatibility checkpoint
+
+The earlier CodeQL failure was caused by calling `fromSource()` on
+`Expr::ClassInstanceExpr`. The modular structural library no longer makes that
+call. Constructor matching keeps the semantic test
+`creation.getConstructedType() = entity`. The final compile pass must still
+exercise all generated modules and all 16 queries in each profile; the earlier
+partial compilation is not treated as final evidence.
+
+## Acceptance record
+
+The final report should include:
+
+- zero QL compilation errors for JPA, MongoDB, and `both`;
+- query evaluation completion for every generated query;
+- expected positive/negative fixture findings;
+- raw and normalized alert counts;
+- per-query and total timings with no inferred or missing values;
+- an explicit comparison against the baseline using the same database and
+  cache conditions.
