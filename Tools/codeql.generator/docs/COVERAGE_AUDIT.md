@@ -176,7 +176,7 @@ patterns whose captures are compared by equality.
 No automated generator tests or CodeQL query tests are present in the baseline.
 `model/output` contains examples, not assertions. V2 needs:
 
-- Unit tests for generated query structure and analysis modes.
+- Unit tests for generated query structure and framework selection.
 - EvolutionContext regression tests for chained operations.
 - Positive/negative Java/JPA fixtures.
 - CodeQL query tests once a CLI and Java database are available.
@@ -194,13 +194,15 @@ No automated generator tests or CodeQL query tests are present in the baseline.
 
 ## V2 closure status
 
-The priorities above were implemented in the current worktree. The normal
-Maven lifecycle now passes 13 tests, the standalone fixture project compiles,
-and all three analysis modes generate the expected pack layout. The structural,
-JPA/Spring, and optional local-flow rules are described in
+The priorities above were implemented in the current worktree. The Maven test
+lifecycle passes, the standalone fixture project compiles, and the JPA,
+MongoDB, and `both`
+profiles generate their expected pack layouts. The structural, persistence,
+and selected local-flow rules are described in
 `COVERAGE_MATRIX.md` and `CHANGELOG_ORIONFLOW_V2.md`.
 
-The audit deliberately remains phrased as a V1 baseline inventory. CodeQL query
-compilation/evaluation is still open because no CLI or database is available;
-this is a validation blocker, not an implemented capability claim.
+The audit deliberately remains phrased as a V1 baseline inventory. Its original
+CodeQL availability statement records the baseline audit environment, not the
+status of the current V2 validation. Current compile/evaluation status is kept
+in `PERFORMANCE_REPORT.md`.
 

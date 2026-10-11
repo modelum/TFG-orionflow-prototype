@@ -1,15 +1,17 @@
 package config
 
 import java.nio.file.Path
-import org.apache.commons.cli.Options
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.DefaultParser
+import org.apache.commons.cli.HelpFormatter
+import org.apache.commons.cli.Option
+import org.apache.commons.cli.Options
 
 class Orion2CodeQLConfig {
 	Path inputScript
-	Path outputPath
-	AnalysisMode analysisMode = AnalysisMode.STRUCTURAL_SEMANTIC
+	Path outputPath = Path.of(".")
+	PersistenceFramework framework = PersistenceFramework.JPA
+	boolean helpRequested
+	val Options options
   
   	/**
    	* Constructor que parsea los argumentos de línea de comandos.
@@ -17,77 +19,55 @@ class Orion2CodeQLConfig {
    	*   -i / --input     Ruta al fichero .orion
    	*   -o / --output    Ruta de salida (opcional)
    	*/
-	new(String[] args) 
-	{
-		val options = new Options
-		
-		// Opción para mostrar la ayuda
-		options.addOption(
-		  Option.builder("h")
-		    .longOpt("help")
-		    .desc("Prints help")
-		    .build()
-		)
-		
-		// Opción para la ruta al script Orion
-	    val inputOption = Option.builder("i")
-	      .longOpt("input")
-	      .desc("Path to an Orion script file (.orion)")
-	      .hasArg()
-	      .argName("orion_file")
-	      .required(true) 
-	      .build()
-	    
-	    options.addOption(inputOption)
+	new(String[] args) {
+		options = createOptions()
+		try {
+			val cmd = new DefaultParser().parse(options, if (args === null) #[] else args)
+			helpRequested = cmd.hasOption("h")
 
-	    // Opción de salida (opcional)
-	    val outputOption = Option.builder("o")
-	      .longOpt("output")
-	      .desc("Path to an output folder")
-	      .hasArg()
-	      .argName("output_folder")
-	      .build()
-	    
-	    options.addOption(outputOption)
+			if (!helpRequested && !cmd.hasOption("i"))
+				throw new IllegalArgumentException("Missing required option: -i/--input")
 
-	    val modeOption = Option.builder("m")
-	      .longOpt("mode")
-	      .desc("Analysis mode: STRUCTURAL, STRUCTURAL_SEMANTIC or DATAFLOW")
-	      .hasArg()
-	      .argName("analysis_mode")
-	      .build()
+			if (cmd.hasOption("i"))
+				inputScript = Path.of(cmd.getOptionValue("i"))
+			if (cmd.hasOption("o"))
+				outputPath = Path.of(cmd.getOptionValue("o"))
+			if (cmd.hasOption("framework"))
+				framework = PersistenceFramework.parse(cmd.getOptionValue("framework"))
 
-	    options.addOption(modeOption)
+			if (cmd.hasOption("a")) {
+				val requested = cmd.getOptionValue("a")
+				if (requested === null || !requested.trim.equalsIgnoreCase("ALL"))
+					throw new IllegalArgumentException(
+						"Unsupported analysis '" + requested +
+						"'. Only the deprecated compatibility value ALL is accepted; " +
+						"analysis rules are now selected automatically."
+					)
+			}
+		} catch (IllegalArgumentException exception) {
+			throw exception
+		} catch (Exception exception) {
+			throw new IllegalArgumentException(exception.message, exception)
+		}
+	}
 
-	    val parser = new DefaultParser
-	    val formatter = new HelpFormatter
-
-	    try {
-	      val cmd = parser.parse(options, args)
-	
-	      if (cmd.hasOption("h")) {
-	        formatter.printHelp("<SpringDataJPA Predictor> ", options)
-	        System.exit(0)
-	      }
-	
-	      if (cmd.hasOption("i")) {
-	        this.inputScript = Path.of(cmd.getOptionValue("i"))
-	      }
-	
-	      if (cmd.hasOption("o")) {
-	        this.outputPath = Path.of(cmd.getOptionValue("o"))
-	      }
-
-	      if (cmd.hasOption("m")) {
-	        this.analysisMode = AnalysisMode.parse(cmd.getOptionValue("m"))
-	      }
-	
-	    } catch (Exception e) {
-	      println(e.message)
-	      formatter.printHelp("<SpringDataJPA Predictor> ", options)
-	      System.exit(1)
-	    }
-  	}
+	private static def Options createOptions() {
+		val result = new Options
+		result.addOption(Option.builder("h").longOpt("help").desc("Prints help").build())
+		result.addOption(Option.builder("i").longOpt("input")
+			.desc("Path to an Orion script file (.orion)")
+			.hasArg().argName("orion_file").build())
+		result.addOption(Option.builder("o").longOpt("output")
+			.desc("Path to an output folder (default: current directory)")
+			.hasArg().argName("output_folder").build())
+		result.addOption(Option.builder("f").longOpt("framework")
+			.desc("Persistence adapters: jpa (default), mongo or both")
+			.hasArg().argName("jpa|mongo|both").build())
+		result.addOption(Option.builder("a").longOpt("analysis")
+			.desc("Deprecated compatibility alias; only ALL is accepted and has no effect")
+			.hasArg().argName("ALL").build())
+		result
+	}
 
   	def setInputScript(Path inputScript) {
     	this.inputScript = inputScript
@@ -105,8 +85,16 @@ class Orion2CodeQLConfig {
     	return this.outputPath
   	}
 
-	def AnalysisMode getAnalysisMode() {
-		return this.analysisMode
+	def PersistenceFramework getFramework() {
+		return this.framework
+	}
+
+	def boolean isHelpRequested() {
+		helpRequested
+	}
+
+	def void printHelp() {
+		new HelpFormatter().printHelp("orionflow-codeql", options)
 	}
 		
 }

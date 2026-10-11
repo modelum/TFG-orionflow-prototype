@@ -1,112 +1,113 @@
 # OrionFlow V2 architecture
 
-## Design goals
+## Overview
 
-V2 extends the existing generator rather than replacing it. Public generation
-methods remain available, the output pack layout stays compatible, and
-`EvolutionContext` remains the authority for mapping logical Orion names to
-identifiers present in the source CodeQL database.
+OrionFlow V2 keeps one generated CodeQL pack per Orion evolution script, but
+splits its predicates into physical modules. This prevents the structural Java
+rules from being duplicated when JPA and MongoDB are selected together and
+keeps DataFlow out of SCOs that do not need it.
 
-The implementation follows four constraints:
+The generation path is:
 
-1. Resolve Java declarations and calls semantically whenever CodeQL exposes the
-   relevant symbol.
-2. Generate Orion names as literals; never build a regex from an AST-derived
-   name when a static capture plus equality is sufficient.
-3. Bind the affected declaration before searching dependants.
-4. Keep local DataFlow optional and constrain both source and sink.
-
-## Components
-
-### Orion2CodeQL
-
-- Iterates operations in source order.
-- Resolves original entity/feature/relationship names through
-  `EvolutionContext`.
-- Passes the selected analysis mode to query templates.
-- Preserves one output query per SCO/target and the existing traceable IDs.
-
-### EvolutionContext
-
-This component is preserved. It stores entity, feature and relationship origins
-for chained operations. For example:
-
-```orion
-RENAME ENTITY Visit TO Appointment
-RENAME Appointment::startDatetime TO startDate
+```text
+Orion AST
+  -> Orion2CodeQL + EvolutionContext
+  -> Entity/Feature/Attribute/Relationship query templates + selected libraries
+  -> operation .ql files + modular .qll files + suite/pack metadata
 ```
 
-The second query must still resolve `Visit.startDatetime`, because that is what
-exists in the source database.
+The generation profile carries the persistence-adapter composition. Structural
+analysis, framework semantics, and SCO-selected DataFlow are always part of the
+V2 generation contract. `Orion2CodeQL` processes operations in source order,
+resolves their source-code identities through `EvolutionContext`, and delegates
+to `EntityQuery`, `FeatureQuery`, `AttributeQuery`, or `RelationshipQuery`.
 
-### Query
+## Generated QL modules
 
-Owns the complete `.ql` query shape and alert messages. Existing signatures are
-kept as compatibility overloads. Mode-aware overloads control semantic and
-DataFlow-only branches at generation time, so disabled analyses add no runtime
-search domain.
+| Module | Responsibility | Emission rule |
+|---|---|---|
+| `orion_java.qll` | Framework-independent Java declarations, resolved type references, constructor expressions, fields, accessors, calls, and type-dependent uses. | Always for a non-empty transformation. |
+| `orion_spring.qll` | Spring rules shared by both persistence engines, including validation property calls and repository domain binding. | Always for a non-empty transformation. |
+| `orion_jpa.qll` | JPA/JPQL and Spring Data JPA semantics, including `jakarta.persistence` and `javax.persistence`. | `--framework jpa` or `both`. |
+| `orion_mongo.qll` | Spring Data MongoDB semantics for documents, stored names, repositories, query strings, mapping metadata, `MongoOperations`, Criteria, Update, and aggregation APIs. | `--framework mongo` or `both`. |
+| `orion_dataflow.qll` | Source/sink-constrained `DataFlow::localFlow` helpers. | Always for a non-empty transformation; imported only by participating SCO queries. |
+| `utils.qll` | Stable facade that imports the structural/shared modules and only the selected persistence adapters. Operation queries depend on this facade. | Always for a non-empty transformation. |
 
-### Library / `utils.qll`
+In `both` mode, `utils.qll` combines JPA and MongoDB alternatives. The Java and
+Spring modules are generated once, not once per adapter.
 
-The physical output remains one `utils.qll` for workflow compatibility. Its
-predicates are organized into logical groups:
+## Framework profiles
 
-- Entity impact: resolved type references and constructions.
-- Feature impact: accessors, calls and value-producing expressions.
-- JPA semantics: dual `jakarta`/`javax` annotations and EntityManager APIs.
-- Spring semantics: constrained property-name APIs and derived queries.
-- Relationship semantics: `JoinTable`, `mappedBy` and association fields.
-- Type dependency: assignments, consumers and local-flow source/sink helpers.
+`--framework jpa|mongo|both` controls adapter composition. `jpa` is the default,
+so existing invocations that omit this flag retain their persistence behavior.
 
-A future physical split into `EntityImpactPredicates.qll`,
-`FeatureImpactPredicates.qll`, `JpaSemanticPredicates.qll`, and related files is
-possible, but is deliberately deferred until the workflow supports multiple
-generated libraries without compatibility risk.
+Every framework selection enables:
 
-## Analysis modes
+1. Structural Java impact detection.
+2. Semantics for the selected persistence adapter or adapters.
+3. Local DataFlow only in the five SCO templates listed below.
 
-- `STRUCTURAL`: declarations, resolved type references, field accesses and
-  accessor calls. Existing static JPQL/JPA coverage is retained for backward
-  compatibility.
-- `STRUCTURAL_SEMANTIC`: structural rules plus expanded JPA and conservative
-  Spring framework rules. This is the default.
-- `DATAFLOW`: semantic mode plus targeted local flow from the affected field or
-  getter to an old-type-dependent consumer.
+`AnalysisMode` and `-m`/`--mode` have been removed. `-a ALL`/`--analysis ALL`
+is accepted only as a deprecated no-op for older invocations; it does not
+select a different query set.
 
-The mode is selected with `--mode`/`-m`. Existing clients that do not pass a
-mode keep the default behavior.
+## Selective DataFlow
 
-## DataFlow boundary
+DataFlow is local and opt-in per SCO; there is no global flow or taint-tracking
+configuration. The five participating operations are:
 
-The initial DataFlow rule uses the modular Java library and
-`DataFlow::localFlow`. Sources are only resolved reads of the affected field or
-its getter. Sinks are only qualifying values of method calls whose declaration
-belongs to the old type hierarchy. Results are labelled as potential when
-availability on the target type cannot be proven.
+- Delete Feature: a value read from the deleted field reaches a dependent call.
+- Cast Attribute: the old value reaches a consumer tied to the old type.
+- Cast Reference: the old reference reaches a consumer tied to the old type.
+- Move Feature: a value read from the source field reaches a dependent call.
+- Delete Relationship: a relationship collection reaches a mutating collection
+  or map operation.
 
-Global DataFlow and taint tracking remain disabled. They require separate
-precision and performance evidence before inclusion.
+Each rule binds the affected `Field` first, constrains its source to a resolved
+field/getter read, and constrains its sink to the operation-specific consumer.
+These findings are labelled as potential impacts. Other SCO queries do not
+import `orion_dataflow.qll`.
 
-## Result identity and deduplication
+## Evolution identity
 
-Queries select the impacted source location and one category-specific message.
-Type construction is reported as a construction, while its nested type access
-is excluded from the generic type-reference branch. Resolved accessor calls are
-reported at the call, not once per argument or internal evidence path.
+`EvolutionContext` separates the logical identity of a schema element from its
+current Orion name and its original source-code name:
 
-The experimental harness must additionally normalize SARIF by query ID, file,
-region and construct category before comparing with ground truth.
+- Entities receive stable IDs `E1`, `E2`, and so on.
+- Features receive stable IDs `F1`, `F2`, and so on.
+- Relationships receive stable IDs `R1`, `R2`, and so on.
 
-## Build and test architecture
+Renames update the current name without changing the logical ID or original
+name. Feature moves likewise retain the feature identity while changing its
+current owner/name. Deletes create tombstones for entities, features, and
+relationships, retaining the logical ID, original identity, last current name,
+and deleted state. This lets a later operation in the same evolution sequence
+continue to target identifiers that exist in the source CodeQL database rather
+than names introduced only by earlier Orion operations.
 
-The Xtend Maven plugin is bound to the normal lifecycle. JUnit tests cover:
+## Query and library compatibility
 
-- Mode parsing and compatibility defaults.
-- Generated structural/semantic/DataFlow fragments.
-- Chained `EvolutionContext` behavior.
-- End-to-end Orion AST generation.
-- Positive and negative fixture expectations.
+Operation templates are split by responsibility into `EntityQuery`,
+`FeatureQuery`, `AttributeQuery`, and `RelationshipQuery`. Names known by the
+Orion generator are inserted into generated predicates as literals. Generic
+helpers use constant regular expressions plus captured-value equality; they do
+not construct a regular expression from `Class.getName()` or `Field.getName()`
+at CodeQL evaluation time.
 
-Actual CodeQL query compilation/evaluation is a separate test tier and must be
-reported as unavailable when the CLI/database is absent.
+The Java construction predicate is compatible with CodeQL 2.27.2: it checks
+`creation.getConstructedType() = entity` and does not call the unsupported
+`ClassInstanceExpr.fromSource()` API. Source filtering remains on APIs that
+exist for their actual QL types, such as `TypeAccess.fromSource()`.
 
+## Build and validation tiers
+
+The Maven lifecycle compiles Xtend/Java and executes the generator tests. That
+tier currently passes. Generated output has also been checked at the generation
+level: each framework profile produces the expected 16 operation queries for
+the current integration script, and omission of `--framework` resolves to JPA.
+
+The target QL environment is CodeQL CLI 2.27.2 with `codeql/java-all` 9.3.2.
+A partial compatibility compilation was performed before the final modular
+validation pass. Full compilation of all current JPA, MongoDB, and `both`
+outputs, followed by query evaluation and result validation, is still in
+progress and must not be inferred from the passing Maven tier.

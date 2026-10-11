@@ -3,15 +3,22 @@ package codeql.template;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import config.AnalysisMode;
+import codeql.template.attribute.AttributeQuery;
+import codeql.template.entity.EntityQuery;
+import codeql.template.feature.FeatureQuery;
+import codeql.template.library.JavaStructuralLibrary;
+import codeql.template.library.JpaLibrary;
+import codeql.template.library.Library;
+import codeql.template.relationship.RelationshipQuery;
+import config.PersistenceFramework;
 import org.junit.jupiter.api.Test;
 
 class QueryGenerationTest {
 
     @Test
     void entityRenameUsesResolvedTypesAndConstructions() {
-        String query = Query.generateEntityRenameOp(
-            "Visit", "Consultation", AnalysisMode.STRUCTURAL).toString();
+        String query = EntityQuery.generateEntityRenameOp(
+            "Visit", "Consultation", PersistenceFramework.JPA).toString();
 
         assertTrue(query.contains("referencesEntityType(typeReference, oldEntity)"));
         assertTrue(query.contains("constructsEntity(creation, oldEntity)"));
@@ -20,62 +27,77 @@ class QueryGenerationTest {
     }
 
     @Test
-    void semanticFeatureModeAddsOnlyConstrainedFrameworkRules() {
-        String structural = Query.generateFeatureRenameOp(
-            "Visit", "birthDate", "dateOfBirth", AnalysisMode.STRUCTURAL).toString();
-        String semantic = Query.generateFeatureRenameOp(
-            "Visit", "birthDate", "dateOfBirth", AnalysisMode.STRUCTURAL_SEMANTIC).toString();
+    void featureQueriesAlwaysIncludeStructuralAndSemanticRules() {
+        String query = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "birthDate", "dateOfBirth", PersistenceFramework.JPA).toString();
+        String both = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "birthDate", "dateOfBirth", PersistenceFramework.BOTH).toString();
 
-        assertTrue(structural.contains("callsAccessor(call, featureField)"));
-        assertFalse(structural.contains("predicate isSpringPropertyReference"));
-        assertTrue(semantic.contains("predicate isSpringPropertyReference"));
-        assertTrue(semantic.contains("propertyName.getValue() = \"birthDate\""));
-        assertTrue(semantic.contains("predicate isSpringDataDerivedQuery"));
-        assertTrue(semantic.contains("exists(ClassOrInterface repository, TypeAccess repositoryType"));
-        assertTrue(semantic.contains("jpaMetadataReferencesField(metadata, featureField)"));
-        assertFalse(semantic.contains("ATTR"));
+        assertTrue(query.contains("callsAccessor(call, featureField)"));
+        assertTrue(query.contains("predicate isSpringPropertyReference"));
+        assertTrue(query.contains("propertyName.getValue() = \"birthDate\""));
+        assertTrue(query.contains("predicate isSpringDataDerivedQuery"));
+        assertTrue(query.contains("isSpringRepositoryMethodForEntity(method, entity)"));
+        assertTrue(query.contains("frameworkMetadataReferencesField(metadata, featureField)"));
+        assertTrue(both.contains("frameworkQueryReferencesField(q, featureField)"));
+        assertFalse(both.contains("isQuery(q) and"));
+        assertFalse(query.contains("ATTR"));
     }
 
     @Test
-    void dataFlowIsEmittedOnlyInDataFlowMode() {
-        String semantic = Query.generateAttributeCastOp(
-            "Visit", "date", "String", AnalysisMode.STRUCTURAL_SEMANTIC).toString();
-        String dataFlow = Query.generateAttributeCastOp(
-            "Visit", "date", "String", AnalysisMode.DATAFLOW).toString();
+    void dataFlowIsBoundToTheSelectedScoTemplates() {
+        String cast = AttributeQuery.generateAttributeCastOp(
+            "Visit", "date", "String", PersistenceFramework.JPA).toString();
+        String rename = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "date", "startDate", PersistenceFramework.JPA).toString();
 
-        assertFalse(semantic.contains("semmle.code.java.dataflow.DataFlow"));
-        assertFalse(semantic.contains("DataFlow::localFlow"));
-        assertTrue(dataFlow.contains("import semmle.code.java.dataflow.DataFlow"));
-        assertTrue(dataFlow.contains("DataFlow::localFlow"));
-        assertTrue(dataFlow.contains("[Potential]"));
+        assertTrue(cast.contains("import orion_dataflow"));
+        assertTrue(cast.contains("fieldValueFlowsToOldTypeConsumer"));
+        assertTrue(cast.contains("[Potential]"));
+        assertFalse(rename.contains("import orion_dataflow"));
     }
 
     @Test
     void relationshipRenameStaysPhysicalWhileDeleteIncludesDomainUses() {
-        String rename = Query.generateRelationshipRenameOp(
-            "vet_specialties", "vet_expertise", AnalysisMode.STRUCTURAL_SEMANTIC).toString();
-        String delete = Query.generateRelationshipDeleteOp(
-            "vet_specialties", AnalysisMode.STRUCTURAL_SEMANTIC).toString();
+        String rename = RelationshipQuery.generateRelationshipRenameOp(
+            "vet_specialties", "vet_expertise", PersistenceFramework.JPA).toString();
+        String delete = RelationshipQuery.generateRelationshipDeleteOp(
+            "vet_specialties", PersistenceFramework.JPA).toString();
 
-        assertTrue(rename.contains("hasJoinTableAnnotation(relationshipField, joinTable)"));
+        assertTrue(rename.contains("getRelationshipMappingAnnotation(relationshipField, oldTableName, joinTable)"));
         assertFalse(rename.contains("callsAccessor"));
         assertTrue(delete.contains("callsAccessor(accessorCall, relationshipField)"));
         assertTrue(delete.contains("access.getField() = relationshipField"));
     }
 
     @Test
-    void utilityPredicatesSupportBothJpaNamespacesWithoutDynamicRegexes() {
-        String library = Library.generateUtils().toString();
+    void standaloneNamedQueriesAreAnalyzedAtTheirDeclaration() {
+        String entity = EntityQuery.generateEntityRenameOp(
+            "Visit", "Consultation", PersistenceFramework.JPA).toString();
+        String feature = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "birthDate", "dateOfBirth", PersistenceFramework.JPA).toString();
 
-        assertTrue(library.contains("hasQualifiedName(\"jakarta.persistence\", simpleName)"));
-        assertTrue(library.contains("hasQualifiedName(\"javax.persistence\", simpleName)"));
-        assertTrue(library.contains("creation.getConstructedType() = entity"));
-        assertTrue(library.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
-        assertTrue(library.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
-        assertFalse(library.contains("creation.fromSource()"));
-        assertTrue(library.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
-        assertTrue(library.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
-        assertFalse(library.contains("regexpMatch(\"(?i).*\\\\b\" + entity.getName()"));
-        assertFalse(library.contains("regexpMatch(\"(?i).*\\\\b\" + field.getName()"));
+        assertTrue(entity.contains("usageLoc = nq.getLocation()"));
+        assertTrue(feature.contains("usageLoc = nq.getLocation()"));
+        assertFalse(entity.contains("isEqual(nq.getValue(\"name\"), q.getValue(\"name\"))"));
+        assertFalse(feature.contains("isEqual(nq.getValue(\"name\"), q.getValue(\"name\"))"));
+    }
+
+    @Test
+    void utilityPredicatesSupportBothJpaNamespacesWithoutDynamicRegexes() {
+        String structural = JavaStructuralLibrary.generate().toString();
+        String jpa = JpaLibrary.generate().toString();
+        String library = Library.generateUtils(PersistenceFramework.JPA).toString();
+
+        assertTrue(jpa.contains("hasQualifiedName(\"jakarta.persistence\", simpleName)"));
+        assertTrue(jpa.contains("hasQualifiedName(\"javax.persistence\", simpleName)"));
+        assertTrue(structural.contains("creation.getConstructedType() = entity"));
+        assertTrue(structural.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
+        assertTrue(jpa.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
+        assertTrue(library.contains("import orion_java"));
+        assertTrue(library.contains("import orion_jpa"));
+        assertFalse(structural.contains("creation.fromSource()"));
+        assertFalse(jpa.contains("regexpMatch(\"(?i).*\\\\b\" + entity.getName()"));
+        assertFalse(jpa.contains("regexpMatch(\"(?i).*\\\\b\" + field.getName()"));
     }
 }
