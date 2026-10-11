@@ -1,24 +1,25 @@
 # OrionFlow V2 coverage matrix
 
 This matrix describes the current generated predicates. “Local DataFlow” means
-the source/sink-constrained helpers in `orion_dataflow.qll`; it does not mean
-global flow or taint tracking.
+the source/sink-constrained helpers in `orion_dataflow.qll`. “Global CAST” is a
+query-local `DataFlow::Global` configuration restricted to the exact CAST
+field. “Call Graph” means resolved propagation bounded to one or two edges.
 
 ## SCO coverage
 
-| SCO | Structural Java | JPA adapter | MongoDB adapter | Local DataFlow |
+| SCO | Structural Java | JPA adapter | MongoDB adapter | Flow extension |
 |---|---|---|---|---|
 | Rename Entity | Entity declaration, resolved `TypeAccess`, construction, typed fields, inheritance, repository type references | `@Entity`/`@Table`, associations, static JPQL, Spring Data JPA `@Query`, named queries, EntityManager | `@Document`, Java/stored collection names, Spring Data Mongo `@Query`, `MongoOperations` collection arguments | No |
 | Delete Entity | Same source-code bindings as Rename Entity | Same JPA entity/query coverage | Same MongoDB document/query/collection coverage | No |
 | Split Entity | Source-side entity deletion impact using preserved lineage | Selected JPA semantics | Selected MongoDB semantics | No |
 | Rename Feature | Field declaration, direct access, accessor declaration and resolved calls | `@Column`, `@JoinColumn`, `mappedBy`, static JPQL, validation properties, derived repository methods | Java and `@Field` names, `@Indexed`/`@CompoundIndex`, JSON query text, Criteria/Update/aggregation field APIs, validation properties, derived repository methods | No |
-| Delete Feature | Same structural and framework bindings as Rename Feature | Same JPA feature semantics | Same MongoDB feature semantics | Yes: field/getter value to dependent call |
-| Move Feature | Source field/access/accessor impact plus target-owner context | Source-side JPA feature metadata/query impact | Source-side MongoDB Java/stored-name metadata/query impact | Yes: source field/getter value to dependent call |
-| Cast Attribute | Field/accessor declarations and calls, initializers, assignments, arguments, direct old-type consumers | Framework metadata associated with the field | Framework metadata and typed field-name APIs | Yes: old value to old-type consumer |
-| Cast Reference | Reference field/accessor declarations and calls, assignments and consumers | Association plus `JoinColumn`/`JoinColumns`/`JoinTable` mapping | `@DBRef`/`@DocumentReference` mapping | Yes: old reference to old-type consumer |
+| Delete Feature | Same structural and framework bindings as Rename Feature | Same JPA feature semantics | Same MongoDB feature semantics | Local DataFlow + Call Graph depth 1/2 |
+| Move Feature | Source field/access/accessor impact plus target-owner context | Source-side JPA feature metadata/query impact | Source-side MongoDB Java/stored-name metadata/query impact | Local DataFlow + Call Graph depth 1/2 |
+| Cast Attribute | Field/accessor declarations and calls, initializers, assignments, arguments, direct old-type consumers | Framework metadata associated with the field | Framework metadata and typed field-name APIs | Local + global DataFlow, exact CAST field |
+| Cast Reference | Reference field/accessor declarations and calls, assignments and consumers | Association plus `JoinColumn`/`JoinColumns`/`JoinTable` mapping | `@DBRef`/`@DocumentReference` mapping | Local + global DataFlow, exact CAST field |
 | Promote Attribute | Existing identifier declaration and annotation impact | `@Id`, `@EmbeddedId`, `@GeneratedValue`, join-column bindings | `@Id` and `@MongoId` | No |
 | Rename Relationship | Mapping annotation containing the physical relationship name | `@JoinTable` and direct/nested `@JoinColumn` names, including `referencedColumnName` | `@Field` stored name and Mongo reference mapping | No |
-| Delete Relationship | Relationship field, related side, accessors/calls, direct and query use | JPA association and `mappedBy` semantics | `@DBRef`/`@DocumentReference`, related fields, Java/stored query names | Yes: relationship collection to collection/map mutation |
+| Delete Relationship | Relationship field, related side, accessors/calls, direct and query use | JPA association and `mappedBy` semantics | `@DBRef`/`@DocumentReference`, related fields, Java/stored query names | Local DataFlow + Call Graph depth 1/2 |
 
 ## Persistence semantics
 
@@ -51,7 +52,10 @@ global flow or taint tracking.
 - Dynamically assembled query text, native SQL, reflective access, and arbitrary
   strings are not treated as schema references.
 - Local DataFlow is enabled only for the five SCOs in the first table. Global
-  DataFlow and taint tracking are not enabled.
+  DataFlow is enabled only for Cast Attribute and Cast Reference; unrestricted
+  taint tracking is not enabled.
+- Call Graph propagation is bounded to two resolved edges and is not a general
+  reachability or whole-program transitive-closure analysis.
 - Rename Relationship targets physical mapping names; it intentionally does not
   report unrelated domain accessor names.
 - Same-named entities in different packages remain limited by Orion selectors

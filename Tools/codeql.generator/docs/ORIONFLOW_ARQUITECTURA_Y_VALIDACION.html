@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OrionFlow V3.2 — Arquitectura y validación</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5b6475;
+      --paper: #ffffff;
+      --soft: #f3f6fb;
+      --line: #d9e1ec;
+      --blue: #2457d6;
+      --blue-soft: #eaf0ff;
+      --cyan: #008aa6;
+      --green: #16845b;
+      --green-soft: #e8f7f0;
+      --amber: #a46600;
+      --amber-soft: #fff4d8;
+      --red: #b93a48;
+      --red-soft: #fdecef;
+    }
+
+    * { box-sizing: border-box; }
+
+    @page {
+      size: A4;
+      margin: 14mm 14mm 15mm;
+    }
+
+    html { background: #ffffff; }
+
+    body {
+      width: 210mm;
+      margin: 0 auto;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 10.3pt;
+      line-height: 1.42;
+    }
+
+    main { padding: 0; }
+
+    .page {
+      min-height: 267mm;
+      padding: 3mm 1mm 0;
+      position: relative;
+      page-break-after: always;
+    }
+
+    .page:last-child { page-break-after: auto; }
+
+    h1, h2, h3 { margin: 0; line-height: 1.15; }
+    h1 { font-size: 29pt; letter-spacing: -0.8px; }
+    h2 { font-size: 19pt; margin-bottom: 5mm; }
+    h3 { font-size: 11.5pt; margin-bottom: 2mm; }
+    p { margin: 0 0 3mm; }
+    ul, ol { margin: 2mm 0 3mm 5mm; padding-left: 4mm; }
+    li { margin-bottom: 1.3mm; }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      margin-bottom: 4mm;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 13pt;
+      line-height: 1.45;
+      max-width: 165mm;
+    }
+
+    .cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 15mm 8mm 10mm;
+      overflow: hidden;
+    }
+
+    .cover::before {
+      content: "";
+      position: absolute;
+      width: 105mm;
+      height: 105mm;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #dbe7ff, #dff7f3);
+      right: -35mm;
+      top: -35mm;
+    }
+
+    .cover-title { position: relative; margin-top: 28mm; }
+    .cover-title h1 { max-width: 150mm; }
+
+    .cover-rule {
+      width: 27mm;
+      height: 2.2mm;
+      background: linear-gradient(90deg, var(--blue), var(--cyan));
+      border-radius: 2mm;
+      margin: 7mm 0;
+    }
+
+    .cover-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4mm;
+      margin-top: 13mm;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 4mm;
+      padding: 5mm;
+      background: #fff;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--blue);
+      font-size: 20pt;
+      line-height: 1;
+      margin-bottom: 2mm;
+    }
+
+    .metric span { color: var(--muted); font-size: 8.7pt; }
+
+    .cover-footer {
+      border-top: 1px solid var(--line);
+      padding-top: 4mm;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5pt;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 4mm;
+      margin-bottom: 5mm;
+    }
+
+    .section-number {
+      width: 10mm;
+      height: 10mm;
+      border-radius: 50%;
+      background: var(--blue);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10pt;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .section-head h2 { margin: 0; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 10mm 1.2fr 10mm 1.4fr 10mm 1fr;
+      align-items: center;
+      gap: 2mm;
+      margin: 8mm 0 7mm;
+    }
+
+    .flow-box {
+      min-height: 30mm;
+      padding: 4mm;
+      border: 1.4px solid var(--line);
+      border-radius: 4mm;
+      background: var(--soft);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .flow-box b { color: var(--blue); margin-bottom: 1.5mm; }
+    .flow-box small { color: var(--muted); font-size: 8pt; }
+    .arrow { color: var(--blue); font-size: 21pt; text-align: center; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+    .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 3.5mm;
+      padding: 4mm;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+
+    .card.soft { background: var(--soft); }
+    .card.blue { background: var(--blue-soft); border-color: #bdcdf9; }
+    .card.green { background: var(--green-soft); border-color: #b8e3d1; }
+    .card.amber { background: var(--amber-soft); border-color: #ead195; }
+    .card.red { background: var(--red-soft); border-color: #efbac2; }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+    .tag {
+      display: inline-block;
+      border-radius: 20mm;
+      padding: 1mm 3mm;
+      font-size: 7.8pt;
+      font-weight: 700;
+      margin-right: 1.5mm;
+      vertical-align: middle;
+    }
+
+    .done { color: var(--green); background: var(--green-soft); }
+    .auto { color: var(--blue); background: var(--blue-soft); }
+    .pending { color: var(--amber); background: var(--amber-soft); }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 3mm;
+      margin-top: 4mm;
+    }
+
+    .module {
+      border-left: 3px solid var(--blue);
+      background: var(--soft);
+      padding: 3mm 4mm;
+      page-break-inside: avoid;
+    }
+
+    .module b { display: block; margin-bottom: 1mm; }
+    .module span { color: var(--muted); font-size: 8.5pt; }
+    .module.framework { border-left-color: var(--cyan); }
+    .module.flowing { border-left-color: var(--green); }
+
+    .pyramid {
+      margin: 6mm auto 8mm;
+      width: 165mm;
+      text-align: center;
+    }
+
+    .pyramid-row {
+      margin: 1.5mm auto;
+      padding: 3mm 6mm;
+      color: white;
+      border-radius: 2mm;
+      font-weight: 700;
+    }
+
+    .p1 { width: 42%; background: #17418f; }
+    .p2 { width: 58%; background: #2457d6; }
+    .p3 { width: 73%; background: #008aa6; }
+    .p4 { width: 88%; background: #16845b; }
+    .p5 { width: 100%; background: #53627b; }
+    .pyramid-row small { display: block; font-weight: 400; opacity: .9; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 3mm 0 5mm;
+      font-size: 8.5pt;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 2.2mm 2.5mm;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--soft); font-weight: 700; }
+    td.num, th.num { text-align: right; white-space: nowrap; }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 8.7pt;
+      color: #173b84;
+      background: #eef3ff;
+      border-radius: 1mm;
+      padding: .3mm 1mm;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: 12mm 1fr;
+      column-gap: 4mm;
+      row-gap: 2.3mm;
+      margin: 4mm 0;
+    }
+
+    .step-n {
+      width: 9mm;
+      height: 9mm;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: 700;
+      border: 1px solid #bdcdf9;
+    }
+
+    .step-body {
+      border-left: 2px solid var(--line);
+      padding: 1mm 0 3mm 4mm;
+    }
+
+    .step-body b { display: block; margin-bottom: .8mm; }
+    .step-body span { color: var(--muted); }
+
+    .checklist {
+      list-style: none;
+      padding: 0;
+      margin-left: 0;
+    }
+
+    .checklist li { padding-left: 6mm; position: relative; }
+    .checklist li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 800;
+      position: absolute;
+      left: 0;
+    }
+
+    .warning-list li::before { content: "→"; color: var(--amber); }
+
+    .result-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3mm;
+      margin: 5mm 0;
+    }
+
+    .result {
+      padding: 4mm 2mm;
+      border-radius: 3mm;
+      background: var(--soft);
+      text-align: center;
+      border: 1px solid var(--line);
+    }
+
+    .result strong { display: block; font-size: 17pt; color: var(--blue); }
+    .result span { font-size: 8pt; color: var(--muted); }
+
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: var(--blue-soft);
+      padding: 4mm 5mm;
+      margin: 4mm 0;
+      page-break-inside: avoid;
+    }
+
+    .small { font-size: 8.4pt; color: var(--muted); }
+    .tight { margin-bottom: 1.5mm; }
+    .mt { margin-top: 5mm; }
+    .page-label {
+      position: absolute;
+      bottom: 1mm;
+      right: 1mm;
+      color: #8a93a3;
+      font-size: 7.5pt;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="page cover">
+    <div class="cover-title">
+      <div class="eyebrow">OrionFlow Java / CodeQL</div>
+      <h1>Arquitectura y validación del generador V3.2</h1>
+      <div class="cover-rule"></div>
+      <p class="lead">Una guía visual de cómo se transforma una evolución Orion en consultas CodeQL y de las capas de prueba usadas para garantizar coherencia sintáctica, semántica y funcional.</p>
+      <div class="cover-grid">
+        <div class="metric"><strong>35</strong><span>tests JUnit superados</span></div>
+        <div class="metric"><strong>48/48</strong><span>queries V3.2 compiladas</span></div>
+        <div class="metric"><strong>2.27.2</strong><span>versión CodeQL objetivo</span></div>
+      </div>
+    </div>
+    <div class="cover-footer">
+      <span>Estado documentado: 11 de octubre de 2026</span>
+      <span>V3.2 validada sobre baseline 22d257a</span>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">1</span><h2>Vista general de la arquitectura</h2></div>
+    <p>El generador mantiene separadas tres responsabilidades: comprender la evolución, resolver la identidad original de los elementos y construir consultas CodeQL modulares.</p>
+
+    <div class="flow">
+      <div class="flow-box"><b>Script Orion</b><small>SCO encadenadas: rename, delete, cast, move…</small></div>
+      <div class="arrow">›</div>
+      <div class="flow-box"><b>Orion2CodeQL</b><small>Parser Xtext + dispatch por tipo de operación</small></div>
+      <div class="arrow">›</div>
+      <div class="flow-box"><b>Plantillas + bibliotecas</b><small>Query por familia y predicados reutilizables</small></div>
+      <div class="arrow">›</div>
+      <div class="flow-box"><b>Pack CodeQL</b><small>.ql + .qll + suite.qls + SARIF</small></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card blue">
+        <h3>Orquestación</h3>
+        <p><code>Orion2CodeQL</code> conserva el <code>dispatch generateOperation(...)</code>. Reconoce cada SCO, consulta el contexto y delega la generación.</p>
+      </div>
+      <div class="card green">
+        <h3>Identidad evolutiva</h3>
+        <p><code>EvolutionContext</code> separa nombre actual y nombre original. Así, un rename de entidad seguido de un rename de campo sigue buscando los símbolos que realmente existen en el código.</p>
+      </div>
+    </div>
+
+    <h3 class="mt">Generadores de consultas</h3>
+    <div class="module-grid">
+      <div class="module"><b>EntityQuery</b><span>Rename, Delete y Split Entity.</span></div>
+      <div class="module"><b>FeatureQuery</b><span>Rename, Delete y Move Feature.</span></div>
+      <div class="module"><b>AttributeQuery</b><span>Cast Attribute, Cast Reference y Promote.</span></div>
+      <div class="module"><b>RelationshipQuery</b><span>Rename y Delete Relationship.</span></div>
+    </div>
+
+    <div class="callout">
+      <b>Regla de diseño:</b> las clases Query construyen CodeQL; no gestionan el historial de evolución. El contexto se resuelve antes de delegar.
+    </div>
+    <div class="page-label">2 · Arquitectura</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">2</span><h2>Bibliotecas generadas y perfiles</h2></div>
+    <div class="module-grid">
+      <div class="module"><b>orion_java.qll</b><span>Símbolos Java, constructores, tipos, campos, accessors e invocaciones resueltas.</span></div>
+      <div class="module framework"><b>orion_spring.qll</b><span>Reglas comunes Spring: Validator y repositorios.</span></div>
+      <div class="module framework"><b>orion_jpa.qll</b><span>JPA, JPQL, Spring Data JPA y namespaces jakarta/javax.</span></div>
+      <div class="module framework"><b>orion_mongo.qll</b><span>Documentos, componentes embebidos, Criteria, Sort y nombres persistidos.</span></div>
+      <div class="module flowing"><b>orion_dataflow.qll</b><span>Flujo local, dirigido por la SCO y con fuentes/sinks restringidos.</span></div>
+      <div class="module flowing"><b>orion_callgraph.qll</b><span>Propagación resuelta y acotada a uno o dos saltos, con valores y efectos.</span></div>
+      <div class="module"><b>utils.qll</b><span>Fachada estable que compone solo los adaptadores seleccionados.</span></div>
+    </div>
+
+    <h3 class="mt">Composición por framework</h3>
+    <table>
+      <thead><tr><th>Perfil</th><th>Java/Spring</th><th>JPA</th><th>Mongo</th><th>Contrato</th></tr></thead>
+      <tbody>
+        <tr><td><code>jpa</code></td><td>✓</td><td>✓</td><td>—</td><td>Valor por defecto.</td></tr>
+        <tr><td><code>mongo</code></td><td>✓</td><td>—</td><td>✓</td><td>Sin contaminación JPA.</td></tr>
+        <tr><td><code>both</code></td><td>✓ una vez</td><td>✓</td><td>✓</td><td>Debe equivaler a la unión exacta.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="two-col">
+      <div class="card soft">
+        <h3>Entradas públicas</h3>
+        <ul class="checklist">
+          <li><code>-i / --input</code></li>
+          <li><code>-o / --output</code></li>
+          <li><code>--framework jpa|mongo|both</code></li>
+          <li><code>-a ALL</code> como alias obsoleto sin efecto</li>
+        </ul>
+      </div>
+      <div class="card green">
+        <h3>Estado V3.2</h3>
+        <p><span class="tag done">VALIDADO</span> Call Graph acotado y DataFlow global limitado a CAST forman parte del pack y se han ejecutado con CodeQL 2.27.2.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      Los nombres conocidos por el generador se insertan como literales en la query. Se evita construir expresiones regulares con nodos AST como <code>parent.getName()</code>, origen de la degradación extrema detectada anteriormente.
+    </div>
+    <div class="page-label">3 · Módulos</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">3</span><h2>Estrategia de pruebas por capas</h2></div>
+    <p>No se considera suficiente que Xtend compile. La validación sube progresivamente desde unidades puras hasta ejecutar las consultas sobre una base CodeQL real.</p>
+
+    <div class="pyramid">
+      <div class="pyramid-row p1">Ground truth / benchmarks<small>Precisión, recall y F1; separado del desarrollo</small></div>
+      <div class="pyramid-row p2">SARIF y regresión semántica<small>positivos, negativos, duplicados y perfiles</small></div>
+      <div class="pyramid-row p3">Ejecución CodeQL real<small>database create + database analyze</small></div>
+      <div class="pyramid-row p4">Compilación de queries<small>CodeQL 2.27.2 + java-all 9.3.2</small></div>
+      <div class="pyramid-row p5">JUnit + generación<small>configuración, contexto, plantillas e integración</small></div>
+    </div>
+
+    <div class="three-col">
+      <div class="card green"><span class="tag done">EJECUTADO</span><h3 class="mt">Baseline V3.1</h3><p>JUnit, generación, compilación QL, base de fixtures, evaluación SARIF y tiempos.</p></div>
+      <div class="card blue"><span class="tag auto">AUTOMATIZABLE</span><h3 class="mt">Scripts</h3><p><code>verify-v2.ps1</code> codifica el patrón integral; <code>compare-sarif.ps1</code> calcula métricas contra ground truth.</p></div>
+      <div class="card green"><span class="tag done">EJECUTADO</span><h3 class="mt">V3.2</h3><p>Fixtures y regresiones específicas de Call Graph y DataFlow global CAST.</p></div>
+    </div>
+
+    <h3 class="mt">Principio de coherencia</h3>
+    <p>Cada capa comprueba una propiedad distinta. Si una query contiene el texto esperado pero usa una API inexistente, falla la compilación CodeQL. Si compila pero enlaza el símbolo equivocado, fallan los fixtures SARIF. Si los perfiles se mezclan, falla la igualdad de conjuntos.</p>
+    <div class="page-label">4 · Estrategia</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">4</span><h2>Pruebas unitarias e integración Java</h2></div>
+    <table>
+      <thead><tr><th>Suite</th><th class="num">Tests</th><th>Qué garantiza</th></tr></thead>
+      <tbody>
+        <tr><td><code>PersistenceFrameworkTest</code></td><td class="num">3</td><td>Parseo de jpa/mongo/both, default JPA, capacidades y rechazo de valores no soportados.</td></tr>
+        <tr><td><code>Orion2CodeQLConfigTest</code></td><td class="num">6</td><td>CLI, input/output, framework, ayuda, alias <code>-a ALL</code> y rechazo de modos eliminados.</td></tr>
+        <tr><td><code>EvolutionContextTest</code></td><td class="num">5</td><td>Renames encadenados, move, split, IDs estables, tombstones y relaciones rename→delete.</td></tr>
+        <tr><td><code>QueryGenerationTest</code></td><td class="num">7</td><td>Fragmentos estructurales/semánticos, DataFlow selectivo, JoinTable, NamedQuery y APIs compatibles.</td></tr>
+        <tr><td><code>ModuleGenerationTest</code></td><td class="num">10</td><td>Composición, Call Graph acotado, DataFlow local/global selectivo, constantes y ausencia de regex dinámicas.</td></tr>
+        <tr><td><code>Orion2CodeQLIntegrationTest</code></td><td class="num">4</td><td>AST Orion → mapa de ficheros, nombres originales, perfiles, reinicio de estado y EvolBlocks.</td></tr>
+        <tr><th>Total actual</th><th class="num">35</th><th>Ejecutados con Maven y JDK 11.</th></tr>
+      </tbody>
+    </table>
+
+    <div class="two-col">
+      <div class="card blue">
+        <h3>Unitarios de plantilla</h3>
+        <p>Inspeccionan el QL generado para asegurar que aparece el predicado correcto y que no reaparecen patrones prohibidos. Son rápidos y localizan regresiones en la plantilla.</p>
+      </div>
+      <div class="card green">
+        <h3>Integración del generador</h3>
+        <p>Construye modelos Orion reales con EMF, ejecuta el transformador y comprueba nombres de archivos, módulos y resolución histórica.</p>
+      </div>
+    </div>
+
+    <div class="card red mt">
+      <h3>Qué no demuestran por sí solos</h3>
+      <p>Una aserción textual no demuestra que la API QL exista ni que el predicado encuentre resultados correctos. Por eso estas suites son la base, no el final de la validación.</p>
+    </div>
+    <div class="page-label">5 · JUnit</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">5</span><h2>Pipeline de validación extremo a extremo</h2></div>
+    <div class="pipeline">
+      <div class="step-n">1</div><div class="step-body"><b>Build limpio del generador</b><span><code>mvn clean test</code> con JDK 11. Compila Xtend/Java y ejecuta las 35 pruebas.</span></div>
+      <div class="step-n">2</div><div class="step-body"><b>Compilación de fixtures</b><span>El proyecto Java interno debe compilar para que las referencias, overloads y tipos sean resolubles.</span></div>
+      <div class="step-n">3</div><div class="step-body"><b>Empaquetado y ejecución CLI</b><span>Se genera el JAR y se ejecuta para default, JPA, Mongo y Both.</span></div>
+      <div class="step-n">4</div><div class="step-body"><b>Contrato de artefactos</b><span>Se comprueban módulos obligatorios/prohibidos, número de queries y equivalencia byte a byte default = JPA.</span></div>
+      <div class="step-n">5</div><div class="step-body"><b>Compilación CodeQL</b><span><code>query compile --check-only</code> sobre cada <code>.ql</code>, usando CLI 2.27.2 y <code>java-all@9.3.2</code>.</span></div>
+      <div class="step-n">6</div><div class="step-body"><b>Base CodeQL real</b><span><code>database create</code> instrumenta el build Maven de los fixtures.</span></div>
+      <div class="step-n">7</div><div class="step-body"><b>Ejecución completa</b><span><code>database analyze</code> produce SARIF para cada perfil sobre la misma base.</span></div>
+      <div class="step-n">8</div><div class="step-body"><b>Oráculo funcional</b><span>Normalización, positivos/negativos, ausencia de duplicados y unión exacta de perfiles.</span></div>
+      <div class="step-n">9</div><div class="step-body"><b>Rendimiento</b><span>Se separan generación, compilación de planes, evaluación, total y alertas.</span></div>
+    </div>
+
+    <div class="callout">
+      <b>Compatibilidad de entorno:</b> Xtend 2.25.0 no puede ejecutarse con bytecode Java 21 en esta configuración. La validación reproducible fija JDK 11; el JAR standalone necesita <code>--add-opens=java.base/java.lang=ALL-UNNAMED</code> por Guice/CGLIB.
+    </div>
+    <div class="page-label">6 · Pipeline</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">6</span><h2>Oráculo SARIF y coherencia entre perfiles</h2></div>
+    <p>Cada hallazgo se normaliza mediante una identidad estable:</p>
+    <div class="card soft"><code>(ruleId, URI normalizada, línea/columna inicial y final, mensaje)</code></div>
+
+    <div class="two-col mt">
+      <div class="card green">
+        <h3>Positivos obligatorios</h3>
+        <ul class="checklist">
+          <li>Regla concreta.</li>
+          <li>Fichero y rango de líneas.</li>
+          <li>Fragmento semántico del mensaje.</li>
+          <li>Símbolo resuelto esperado.</li>
+        </ul>
+      </div>
+      <div class="card red">
+        <h3>Negativos obligatorios</h3>
+        <ul class="checklist warning-list">
+          <li>Clases homónimas no persistentes.</li>
+          <li>Strings iguales en APIs arbitrarias.</li>
+          <li>Propiedades de otra entidad.</li>
+          <li>Expresiones dinámicas no resolubles.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="mt">Invariantes de composición</h3>
+    <table>
+      <thead><tr><th>Invariante</th><th>Fallo que evita</th></tr></thead>
+      <tbody>
+        <tr><td>Default = JPA explícito</td><td>Cambio silencioso de compatibilidad CLI.</td></tr>
+        <tr><td>JPA no contiene resultados Mongo</td><td>Acoplamiento o import de adaptador indebido.</td></tr>
+        <tr><td>Mongo no contiene resultados JPA</td><td>Contaminación cruzada entre frameworks.</td></tr>
+        <tr><td>Both = conjunto(JPA ∪ Mongo)</td><td>Pérdidas, extras o precedencia lógica incorrecta.</td></tr>
+        <tr><td>Sin identidades duplicadas</td><td>Dos caminos equivalentes reportando el mismo impacto.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      Comparar solo el número total no basta: una pérdida y un falso positivo podrían compensarse. La comparación se realiza sobre conjuntos de identidades normalizadas.
+    </div>
+    <div class="page-label">7 · SARIF</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">7</span><h2>Cobertura funcional de fixtures</h2></div>
+    <table>
+      <thead><tr><th>Capacidad</th><th>Positivos</th><th>Negativos / control</th></tr></thead>
+      <tbody>
+        <tr><td>Constructores Entity</td><td>Público vacío, público con parámetro y privado.</td><td>Clase Visit homónima no persistente.</td></tr>
+        <tr><td>EvolutionContext</td><td>Rename Entity → Rename Feature → Delete.</td><td>No buscar nombres nuevos inexistentes en Java.</td></tr>
+        <tr><td>Mongo embebido</td><td>List, array, anidación y ciclos acotados.</td><td>static, transient, DBRef y DocumentReference no crean ownership.</td></tr>
+        <tr><td>Criteria / Sort</td><td>where, and, by, Order.asc y Order.desc.</td><td>Variable dinámica y método arbitrario con el mismo literal.</td></tr>
+        <tr><td>Validator Object</td><td>Cast local Object → Visit y supports(Visit).</td><td>Cast a otra entidad y método ambiguo.</td></tr>
+        <tr><td>Constantes</td><td>Literal, static final, clase externa y concatenación.</td><td>Constante no relacionada y expresión dinámica.</td></tr>
+        <tr><td>Metadatos</td><td>Valor lógico explícito con dependencia real.</td><td>Marcadores @Entity/@Table/@Document/Lombok redundantes.</td></tr>
+        <tr><td>Call Graph V3.2</td><td>Uno/dos saltos, mutación indirecta, helper privado y despacho virtual.</td><td>Resultado descartado y overload no relacionado.</td></tr>
+        <tr><td>Global CAST V3.2</td><td>Argumentos, retornos, cadenas y varios parámetros del mismo tipo.</td><td>Fuente ajena y consumidor compatible con el tipo nuevo.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Resultados reales V3.2</h3>
+    <div class="result-strip">
+      <div class="result"><strong>175</strong><span>alertas JPA</span></div>
+      <div class="result"><strong>55</strong><span>alertas Mongo</span></div>
+      <div class="result"><strong>230</strong><span>alertas Both (raw)</span></div>
+      <div class="result"><strong>224</strong><span>identidades únicas Both</span></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card green"><h3>Composición exacta</h3><p>224 esperadas, 224 obtenidas, 0 faltantes y 0 extras al comparar Both con la unión JPA/Mongo.</p></div>
+      <div class="card blue"><h3>Compatibilidad QL</h3><p>48/48 consultas compilaron; Both incluye 24 impactos Call Graph y 7 rutas globales CAST.</p></div>
+    </div>
+
+    <p class="small mt">Estos recuentos validan los fixtures internos. No equivalen a métricas de precisión/recall sobre proyectos externos ni sustituyen un ground truth.</p>
+    <div class="page-label">8 · Cobertura</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">8</span><h2>Rendimiento y regresión</h2></div>
+    <table>
+      <thead><tr><th>Actividad</th><th class="num">JPA</th><th class="num">Mongo</th><th class="num">Both</th></tr></thead>
+      <tbody>
+        <tr><td>Consultas analizadas</td><td class="num">16</td><td class="num">16</td><td class="num">16</td></tr>
+        <tr><td>Database analyze total</td><td class="num">218,45 s</td><td class="num">218,64 s</td><td class="num">217,59 s</td></tr>
+        <tr><td>Evaluación individual más lenta</td><td class="num">6,0 s</td><td class="num">2,7 s</td><td class="num">2,4 s</td></tr>
+      </tbody>
+    </table>
+
+    <div class="two-col">
+      <div class="card green">
+        <h3>Coste acotado</h3>
+        <p>Call Graph se limita a dos saltos y el flujo global parte de un único campo CAST. La evaluación más lenta quedó en 6,0 s en el fixture.</p>
+      </div>
+      <div class="card soft">
+        <h3>Medición honesta</h3>
+        <p>CodeQL eligió <code>-Xmx3434M</code> y 3660 MB off-heap, pero los logs no aportaron RSS máximo real. No se declara una cifra de memoria pico.</p>
+      </div>
+    </div>
+
+    <h3 class="mt">Criterios de aceptación de rendimiento</h3>
+    <ul class="checklist">
+      <li>Separar compilación y evaluación para no atribuir el coste al predicado equivocado.</li>
+      <li>Ejecutar los perfiles sobre la misma base y hardware.</li>
+      <li>Comparar alertas junto con tiempo: una query rápida que pierde positivos no es válida.</li>
+      <li>Rechazar degradaciones extremas o impredecibles.</li>
+      <li>Preservar regex estáticas y limitar fuentes/sinks antes de añadir propagación.</li>
+    </ul>
+
+    <p class="small">Los tiempos son observaciones de una ejecución local sobre fixtures internos, no garantías para aplicaciones de mayor tamaño.</p>
+    <div class="page-label">9 · Rendimiento</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">9</span><h2>Extensiones V3.2 validadas</h2></div>
+    <p>Las dos extensiones se incorporan automáticamente por SCO, sin introducir flags públicos nuevos.</p>
+
+    <div class="two-col">
+      <div class="card green">
+        <span class="tag done">CALL GRAPH · VALIDADO</span>
+        <h3 class="mt">Delete Relationship / Feature / Move</h3>
+        <ul>
+          <li>Dependencia directa y wrapper que consume el resultado.</li>
+          <li>Modificación indirecta de colección.</li>
+          <li>Uno y dos niveles, sin cierre transitivo general.</li>
+          <li>Overloads, herencia, despacho virtual y helpers privados.</li>
+          <li>Negativo: llamada cuyo resultado se descarta y no tiene efecto relevante.</li>
+          <li>Evidencia en mensaje: origen, llamador y profundidad.</li>
+        </ul>
+      </div>
+      <div class="card green">
+        <span class="tag done">GLOBAL DATAFLOW · VALIDADO</span>
+        <h3 class="mt">Solo CAST Attribute / Reference</h3>
+        <ul>
+          <li>Fuente exacta: campo/getter afectado.</li>
+          <li>Argumentos, retornos, variables y llamadas encadenadas.</li>
+          <li>Sink ligado al tipo anterior, no cualquier uso.</li>
+          <li>Varios parámetros del mismo tipo y referencias similares.</li>
+          <li>Negativo: consumidor compatible con el tipo nuevo.</li>
+          <li>Regresión: ninguna SCO no-CAST activa flujo global.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="result-strip">
+      <div class="result"><strong>24</strong><span>impactos Call Graph</span></div>
+      <div class="result"><strong>7</strong><span>rutas globales CAST</span></div>
+      <div class="result"><strong>0</strong><span>globales fuera de CAST</span></div>
+      <div class="result"><strong>0</strong><span>extras/faltantes Both</span></div>
+    </div>
+
+    <h3 class="mt">Comparación experimental</h3>
+    <table>
+      <thead><tr><th>Conjunto</th><th>Uso</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td>Fixtures internos</td><td>Desarrollo, positivos/negativos y coste incremental.</td><td><span class="tag done">EN USO</span></td></tr>
+        <tr><td>PetClinic / StudAdvice</td><td>Conjuntos de desarrollo externos.</td><td><span class="tag pending">NO DISPONIBLES</span></td></tr>
+        <tr><td>OpenMRS / DZHW</td><td>Evaluación independiente contra ground truth.</td><td><span class="tag pending">RESERVADOS</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <b>Métricas externas:</b> <code>compare-sarif.ps1</code> calcula TP, FP, FN, precision, recall y F1 por regla y global. Solo deben publicarse cuando existan SARIF y ground truth reales; nunca se estiman.
+    </div>
+    <div class="page-label">10 · V3.2</div>
+  </section>
+
+  <section class="page">
+    <div class="section-head"><span class="section-number">10</span><h2>Checklist de cierre</h2></div>
+    <div class="two-col">
+      <div class="card green">
+        <h3>Para cada cambio</h3>
+        <ul class="checklist">
+          <li>Test unitario de la plantilla.</li>
+          <li>Fixture positivo y negativo.</li>
+          <li>Generación en jpa/mongo/both.</li>
+          <li>Compilación con CodeQL 2.27.2.</li>
+          <li>Ejecución y comprobación SARIF.</li>
+          <li>Medición separada de coste.</li>
+        </ul>
+      </div>
+      <div class="card blue">
+        <h3>Para una release</h3>
+        <ul class="checklist">
+          <li>Default idéntico a JPA.</li>
+          <li>Both igual a unión exacta.</li>
+          <li>EvolutionContext encadenado.</li>
+          <li>Sin duplicados ni cruces de framework.</li>
+          <li>Ground truth intacto.</li>
+          <li>Documentación y limitaciones actualizadas.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card soft mt">
+      <h3>Artefactos de evidencia</h3>
+      <ul>
+        <li><code>src/test/java/**</code>: unitarios e integración.</li>
+        <li><code>src/test/resources/fixtures/**</code>: oráculo Java positivo/negativo.</li>
+        <li><code>scripts/verify-v2.ps1</code>: patrón automatizado de validación integral.</li>
+        <li><code>scripts/verify-v3_2-results.ps1</code>: positivos, negativos y unión SARIF V3.2.</li>
+        <li><code>scripts/compare-sarif.ps1</code>: métricas contra ground truth.</li>
+        <li><code>docs/V3_2_TEST_RESULTS.md</code> y <code>V3_2_PERFORMANCE.md</code>: resultados medidos.</li>
+      </ul>
+    </div>
+
+    <div class="callout mt">
+      <b>Conclusión:</b> la coherencia se garantiza combinando pruebas rápidas de generación con compilación y ejecución reales de CodeQL, un oráculo SARIF sensible a positivos y negativos, y controles de composición y rendimiento. Ninguna capa sustituye a las demás.
+    </div>
+
+    <p class="small mt">Documento generado desde el estado local del repositorio. No se realizó push ni se sustituyeron JAR desplegados.</p>
+    <div class="page-label">11 · Cierre</div>
+  </section>
+</main>
+</body>
+</html>

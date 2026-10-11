@@ -16,7 +16,12 @@ class FeatureQuery {
 	)
 	'''
 	«IF framework.includesJpa && framework.includesMongo»
-	frameworkQueryReferencesField(«queryVariable», «fieldVariable»)
+	(
+	(isJpaFrameworkQuery(«queryVariable») and usesField(«queryExpression»))
+	 or
+	(isMongoFrameworkQuery(«queryVariable») and
+	 frameworkQueryReferencesField(«queryVariable», «fieldVariable»))
+	)
 	«ELSEIF framework.includesMongo»
 	isQuery(«queryVariable») and
 	(usesField(«queryExpression») or
@@ -155,9 +160,9 @@ class FeatureQuery {
 	    exists(MethodCall call |
 	      (
 	        (isCreateQuery(call) and
-	        exists(StringLiteral queryLiteral |
-	          queryLiteral = call.getArgument(0) and
-	          «queryUsesField("queryLiteral")»
+	        exists(Expr queryValue |
+	          queryValue = call.getArgument(0) and
+	          «queryUsesField("queryValue")»
 	        ))
 	
 	        or
@@ -185,6 +190,7 @@ class FeatureQuery {
 	static def generateFeatureDeleteOp(String entityName, String featureName, PersistenceFramework framework)
 	'''
 	import java
+	import orion_callgraph
 	import orion_dataflow
 	import utils
 
@@ -249,6 +255,21 @@ class FeatureQuery {
 	    )
 
 	    or
+	    // Bounded call-graph propagation from methods that directly access the
+	    // deleted field. Only result/effect-dependent callers are reported.
+	    exists(
+	      Method impactedMethod, MethodCall evidence, string depth, string reason
+	    |
+	      fieldCallGraphImpact(
+	        attributeField, impactedMethod, evidence, depth, reason
+	      ) and
+	      usageLoc = impactedMethod.getLocation() and
+	      message = "[CallGraph depth " + depth + "] Method '" +
+	        impactedMethod.getName() + "' depends on deleted attribute '" +
+	        attributeField.getName() + "': it " + reason + "."
+	    )
+
+	    or
 	    exists(MethodCall call, StringLiteral propertyName |
 	      isFrameworkFieldNameCall(call, propertyName, attributeField) and
 	      usageLoc = propertyName.getLocation() and
@@ -297,9 +318,9 @@ class FeatureQuery {
 	      (
 	        // agrupa las dos alternativas
 	        (isCreateQuery(call) and
-	        exists(StringLiteral queryLiteral |
-	          queryLiteral = call.getArgument(0) and
-	          «queryUsesField("queryLiteral")»
+	        exists(Expr queryValue |
+	          queryValue = call.getArgument(0) and
+	          «queryUsesField("queryValue")»
 	        ))
 	
 	        or
@@ -355,6 +376,7 @@ class FeatureQuery {
 	)
 	'''
 	import java
+	import orion_callgraph
 	import orion_dataflow
 	import utils
 
@@ -390,6 +412,20 @@ class FeatureQuery {
 	      usageLoc = accessorCall.getLocation() and
 	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
 	        "' must be updated for moved feature '" + featureField.getName() + "'."
+	    )
+
+	    or
+	    exists(
+	      Method impactedMethod, MethodCall evidence, string depth, string reason
+	    |
+	      fieldCallGraphImpact(
+	        featureField, impactedMethod, evidence, depth, reason
+	      ) and
+	      usageLoc = impactedMethod.getLocation() and
+	      message = "[CallGraph depth " + depth + "] Method '" +
+	        impactedMethod.getName() + "' depends on moved feature '" +
+	        featureField.getName() + "': it " + reason +
+	        " and must be redirected to its new owner."
 	    )
 
 	    or

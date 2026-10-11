@@ -1,0 +1,20 @@
+Codeql_fixtures_v3_2 operations
+
+USING Fixture:1
+
+RENAME ENTITY Visit TO Consultation
+RENAME Consultation::birthDate TO dateOfBirth
+DELETE Consultation::dateOfBirth
+CAST ATTR Consultation::date TO String
+CAST REF Vet::specialties TO String
+MOVE Consultation::date TO VisitArchive::archivedDate WHERE id = visitId
+DELETE ENTITY Consultation
+RENAME RELATIONSHIP vet_specialties TO vet_expertise
+DELETE RELATIONSHIP vet_expertise
+RENAME ENTITY PatientDocument TO PatientRecord
+RENAME PatientRecord::birthDate TO dateOfBirth
+DELETE PatientRecord::dateOfBirth
+CAST REF PatientRecord::primaryProvider TO String
+MOVE PatientRecord::status TO PatientArchive::status WHERE id = patientId
+DELETE RELATIONSHIP providers
+RENAME ENTITY LegacyVisit TO ArchivedLegacyVisit

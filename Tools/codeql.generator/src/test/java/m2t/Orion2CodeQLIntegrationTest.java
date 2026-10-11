@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import config.PersistenceFramework;
 import es.um.uschema.xtext.orion.orion.EntityRenameOp;
 import es.um.uschema.xtext.orion.orion.EvolBlock;
 import es.um.uschema.xtext.orion.orion.FeatureRenameOp;
@@ -14,8 +13,11 @@ import es.um.uschema.xtext.orion.orion.OrionFactory;
 import es.um.uschema.xtext.orion.orion.OrionOperations;
 import es.um.uschema.xtext.orion.orion.SchemaTypeRenameSpec;
 import es.um.uschema.xtext.orion.orion.SingleFeatureSelector;
+
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+
+import config.PersistenceFramework;
 
 class Orion2CodeQLIntegrationTest {
 
@@ -67,6 +69,7 @@ class Orion2CodeQLIntegrationTest {
 
         assertEquals(implicitJpa, explicitJpa);
         assertTrue(implicitJpa.containsKey("orion_java.qll"));
+        assertTrue(implicitJpa.containsKey("orion_callgraph.qll"));
         assertTrue(implicitJpa.containsKey("orion_jpa.qll"));
         assertFalse(implicitJpa.containsKey("orion_mongo.qll"));
         assertTrue(mongo.containsKey("orion_mongo.qll"));
@@ -81,7 +84,7 @@ class Orion2CodeQLIntegrationTest {
     void transformerResetsLineageAndOrdinalBetweenInvocations() {
         Orion2CodeQL transformer = new Orion2CodeQL(PersistenceFramework.JPA);
         transformer.m2t(operationsWithRename("Visit", "Appointment"));
-
+        
         Map<String, String> second =
             transformer.m2t(operationsWithRename("Patient", "Person"));
         String query = second.get("0-EntityRenameOp.ql");

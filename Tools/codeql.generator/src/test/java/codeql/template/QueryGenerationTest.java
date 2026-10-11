@@ -22,6 +22,7 @@ class QueryGenerationTest {
 
         assertTrue(query.contains("referencesEntityType(typeReference, oldEntity)"));
         assertTrue(query.contains("constructsEntity(creation, oldEntity)"));
+        assertTrue(query.contains("declaresEntityConstructor(constructor, oldEntity)"));
         assertTrue(query.contains("oldEntity.hasName(\"Visit\")"));
         assertFalse(query.contains("field.getType().getName() = oldEntity.getName()"));
     }
@@ -39,6 +40,8 @@ class QueryGenerationTest {
         assertTrue(query.contains("predicate isSpringDataDerivedQuery"));
         assertTrue(query.contains("isSpringRepositoryMethodForEntity(method, entity)"));
         assertTrue(query.contains("frameworkMetadataReferencesField(metadata, featureField)"));
+        assertTrue(both.contains("isJpaFrameworkQuery(q) and usesField(q.getValue(\"value\"))"));
+        assertTrue(both.contains("isMongoFrameworkQuery(q)"));
         assertTrue(both.contains("frameworkQueryReferencesField(q, featureField)"));
         assertFalse(both.contains("isQuery(q) and"));
         assertFalse(query.contains("ATTR"));
@@ -53,6 +56,8 @@ class QueryGenerationTest {
 
         assertTrue(cast.contains("import orion_dataflow"));
         assertTrue(cast.contains("fieldValueFlowsToOldTypeConsumer"));
+        assertTrue(cast.contains("fieldValueGloballyFlowsToOldTypeConsumer"));
+        assertTrue(cast.contains("[Global]"));
         assertTrue(cast.contains("[Potential]"));
         assertFalse(rename.contains("import orion_dataflow"));
     }
@@ -68,6 +73,8 @@ class QueryGenerationTest {
         assertFalse(rename.contains("callsAccessor"));
         assertTrue(delete.contains("callsAccessor(accessorCall, relationshipField)"));
         assertTrue(delete.contains("access.getField() = relationshipField"));
+        assertTrue(delete.contains("fieldCallGraphImpact"));
+        assertFalse(rename.contains("fieldCallGraphImpact"));
     }
 
     @Test
@@ -92,6 +99,9 @@ class QueryGenerationTest {
         assertTrue(jpa.contains("hasQualifiedName(\"jakarta.persistence\", simpleName)"));
         assertTrue(jpa.contains("hasQualifiedName(\"javax.persistence\", simpleName)"));
         assertTrue(structural.contains("creation.getConstructedType() = entity"));
+        assertTrue(structural.contains("expression.(CompileTimeConstantExpr).getStringValue()"));
+        assertTrue(structural.contains("constructor.getDeclaringType() = entity"));
+        assertTrue(structural.contains("not constructor.isDefaultConstructor()"));
         assertTrue(structural.contains("field.getType().(ParameterizedType).getATypeArgument() = entity"));
         assertTrue(jpa.contains("fieldTargetsEntity(mappedField, relationshipField.getDeclaringType())"));
         assertTrue(library.contains("import orion_java"));
@@ -99,5 +109,17 @@ class QueryGenerationTest {
         assertFalse(structural.contains("creation.fromSource()"));
         assertFalse(jpa.contains("regexpMatch(\"(?i).*\\\\b\" + entity.getName()"));
         assertFalse(jpa.contains("regexpMatch(\"(?i).*\\\\b\" + field.getName()"));
+    }
+
+    @Test
+    void entityMetadataReportsOnlyAnIndependentExplicitLogicalRename() {
+        String rename = EntityQuery.generateEntityRenameOp(
+            "Visit", "Consultation", PersistenceFramework.BOTH).toString();
+        String delete = EntityQuery.generateEntityDeleteOp(
+            "Visit", PersistenceFramework.BOTH).toString();
+
+        assertTrue(rename.contains("frameworkEntityRenameMetadataAnnotation"));
+        assertFalse(rename.contains("frameworkEntityMetadataAnnotation"));
+        assertFalse(delete.contains("frameworkEntityMetadataAnnotation"));
     }
 }

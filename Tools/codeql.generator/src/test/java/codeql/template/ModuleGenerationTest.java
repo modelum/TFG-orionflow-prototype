@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import codeql.template.attribute.AttributeQuery;
 import codeql.template.feature.FeatureQuery;
 import codeql.template.library.DataFlowLibrary;
+import codeql.template.library.CallGraphImpactLibrary;
 import codeql.template.library.JpaLibrary;
 import codeql.template.library.Library;
 import codeql.template.library.MongoLibrary;
@@ -51,16 +52,37 @@ class ModuleGenerationTest {
         assertTrue(mongo.contains("predicate mongoCollectionHasName"));
         assertTrue(mongo.contains("annotation.getStringValue(\"collection\")"));
         assertTrue(mongo.contains("predicate mongoFieldHasName"));
+        assertTrue(mongo.contains("predicate isMongoPersistentEntity"));
+        assertTrue(mongo.contains("mongoDirectlyEmbeds+(root, entity)"));
+        assertTrue(mongo.contains("not field.isStatic()"));
+        assertTrue(mongo.contains("not field.isTransient()"));
         assertTrue(mongo.contains("isMongoCollectionNameCall"));
         assertTrue(mongo.contains("MongoOperations"));
         assertTrue(mongo.contains("CompoundIndex"));
         assertTrue(mongo.contains("queryValue.(CompileTimeConstantExpr).getStringValue()"));
         assertTrue(mongo.contains("document.splitAt(\"{\").splitAt(\"[\").splitAt(\",\")"));
         assertEquals(2, occurrences(mongo, "bindingset[document]"));
+        assertEquals(1, occurrences(mongo, "bindingset[path]"));
         assertTrue(mongo.contains("mongoDocumentReferencesField(annotation.getStringValue(\"def\"), field)"));
         assertTrue(mongo.contains("name = annotation.getStringValue(\"value\")"));
         assertTrue(mongo.contains("^(update|set|setOnInsert|unset|rename|inc|multiply|min|max|currentDate|currentTimestamp|push|pushAll|addToSet|pop|pull|pullAll|bitwise)$"));
+        assertTrue(mongo.contains("^(where|and)$"));
+        assertTrue(mongo.contains("isSpringDataSortMethod"));
+        assertTrue(mongo.contains("isSpringDataSortOrderMethod"));
+        assertTrue(mongo.contains("mongoCallHasEntityContext(call, field)"));
         assertFalse(mongo.contains("queryValue.toString().regexpCapture"));
+    }
+
+    @Test
+    void springValidationSupportsTypedAndLocalObjectCastBindings() {
+        String spring = SpringCommonLibrary.generate().toString();
+
+        assertTrue(spring.contains("predicate springValidationCallTargetsEntity"));
+        assertTrue(spring.contains("target.getType().(RefType).hasQualifiedName(\"java.lang\", \"Object\")"));
+        assertTrue(spring.contains("cast.getExpr() = target.getAnAccess()"));
+        assertTrue(spring.contains("variable.getInitializer() = cast"));
+        assertTrue(spring.contains("springValidatorSupportsEntity"));
+        assertTrue(spring.contains("otherEntity != entity"));
     }
 
     @Test
@@ -90,6 +112,47 @@ class ModuleGenerationTest {
         assertTrue(moveFeature.contains("fieldValueFlowsToDependentCall"));
         assertTrue(deleteRelationship.contains("relationshipValueFlowsToMutation"));
         assertFalse(renameFeature.contains("import orion_dataflow"));
+        assertTrue(castAttribute.contains("module OrionCastGlobalConfig"));
+        assertTrue(castAttribute.contains("OrionCastGlobalFlow::flow"));
+        assertTrue(castReference.contains("module OrionCastGlobalConfig"));
+        assertFalse(deleteFeature.contains("OrionCastGlobalFlow::flow"));
+        assertFalse(moveFeature.contains("OrionCastGlobalFlow::flow"));
+        assertFalse(deleteRelationship.contains("OrionCastGlobalFlow::flow"));
+    }
+
+    @Test
+    void callGraphIsBoundedAndImportedOnlyBySelectedOperations() {
+        String library = CallGraphImpactLibrary.generate().toString();
+        String deleteFeature = FeatureQuery.generateFeatureDeleteOp(
+            "Visit", "date").toString();
+        String moveFeature = FeatureQuery.generateFeatureMoveOp(
+            "Visit", "date", "Archive", "archivedDate").toString();
+        String deleteRelationship = RelationshipQuery.generateRelationshipDeleteOp(
+            "visit_tags").toString();
+        String renameFeature = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "date", "startDate").toString();
+
+        assertTrue(library.contains("viableCallable(call)"));
+        assertTrue(library.contains("not call instanceof ValueDiscardingExpr"));
+        assertTrue(library.contains("depth = \"1\""));
+        assertTrue(library.contains("depth = \"2\""));
+        assertFalse(library.contains("fieldCallGraphImpact+"));
+        assertTrue(deleteFeature.contains("import orion_callgraph"));
+        assertTrue(moveFeature.contains("import orion_callgraph"));
+        assertTrue(deleteRelationship.contains("import orion_callgraph"));
+        assertFalse(renameFeature.contains("import orion_callgraph"));
+    }
+
+    @Test
+    void globalCastConfigurationIsSpecificToGeneratedSco() {
+        String global = DataFlowLibrary.generateGlobalCastFlow(
+            "Visit", "date", "String").toString();
+
+        assertTrue(global.contains("entity.hasName(\"Visit\")"));
+        assertTrue(global.contains("field.hasName(\"date\")"));
+        assertTrue(global.contains("replacementType.getName() = \"String\""));
+        assertTrue(global.contains("DataFlow::Global<OrionCastGlobalConfig>"));
+        assertTrue(global.contains("not DataFlow::localFlow"));
     }
 
     @Test
@@ -115,6 +178,9 @@ class ModuleGenerationTest {
         assertTrue(field.contains("birthDate"));
         assertFalse(entity.contains("+ entity.getName()"));
         assertFalse(field.contains("+ field.getName()"));
+        assertTrue(entity.contains("compileTimeStringValue(queryValue, queryText)"));
+        assertTrue(field.contains("compileTimeStringValue(queryValue, queryText)"));
+        assertFalse(field.contains("queryValue.toString().regexp"));
     }
 
     private int occurrences(String text, String token) {

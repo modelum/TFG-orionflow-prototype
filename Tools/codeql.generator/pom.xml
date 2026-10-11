@@ -5,7 +5,7 @@
 
   <groupId>ModelUM</groupId>
   <artifactId>SpringDataJPA.predictor</artifactId>
-  <version>3.0.0</version>
+  <version>3.2.0</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -83,44 +83,52 @@
         <version>2.25.0</version>
         <executions>
           <execution>
-            <goals>
-              <goal>compile</goal>
-              <goal>testCompile</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <version>3.5.0</version>
-        <executions>
-          <execution>
-            <id>add-generated-sources</id>
+            <id>compile-xtend</id>
             <phase>generate-sources</phase>
             <goals>
-              <goal>add-source</goal>
+              <goal>compile</goal>
             </goals>
             <configuration>
-              <sources>
-                <source>${project.basedir}/src/main/xtend-gen</source>
-              </sources>
+              <outputDirectory>src/main/generated-sources/xtend</outputDirectory>
+              <tempDirectory>${project.build.directory}/xtend</tempDirectory>
+              <writeTraceFiles>false</writeTraceFiles>
             </configuration>
           </execution>
         </executions>
       </plugin>
 
-      <!-- 2) Java compiler: incluye el directorio xtend-gen -->
+      <!-- Xtend registra directamente sus fuentes generadas en Maven. -->
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.10.1</version>
         <configuration>
           <source>${maven.compiler.source}</source>
           <target>${maven.compiler.target}</target>
-          <generatedSourcesDirectory>${project.build.directory}/xtend-gen</generatedSourcesDirectory>
           <encoding>${project.build.sourceEncoding}</encoding>
         </configuration>
+      </plugin>
+
+      <!-- Xtend/Xtext 2.25 usa ASM incompatible con el bytecode de JDK 21. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>require-jdk-11</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[11,12)</version>
+                  <message>This project requires JDK 11 because Xtend/Xtext 2.25 is not compatible with JDK 21 bytecode.</message>
+                </requireJavaVersion>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
 
       <plugin>

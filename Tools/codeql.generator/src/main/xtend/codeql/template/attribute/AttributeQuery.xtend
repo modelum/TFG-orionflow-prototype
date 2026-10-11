@@ -1,5 +1,6 @@
 package codeql.template.attribute
 
+import codeql.template.library.DataFlowLibrary
 import config.PersistenceFramework
 
 /** Generates CodeQL queries for attribute/reference Orion operations. */
@@ -15,6 +16,8 @@ class AttributeQuery {
 	import java
 	import orion_dataflow
 	import utils
+
+	«DataFlowLibrary.generateGlobalCastFlow(entityName, fieldName, newFieldType)»
 	
 	from
 	  Class entity, Field attributeField, Location usageLoc, string message, string oldType,
@@ -46,6 +49,16 @@ class AttributeQuery {
 	      usageLoc = accessorCall.getLocation() and
 	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
 	        "' depends on attribute type '" + oldType + "' which will change to '" + newType + "'."
+	    )
+
+	    or
+	    // Typed persistence APIs may impose ordering/comparison semantics that
+	    // depend on the attribute's previous type.
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isFrameworkFieldNameCall(call, propertyName, attributeField) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Persistence API uses attribute '" + attributeField.getName() +
+	        "' whose type will change from '" + oldType + "' to '" + newType + "'."
 	    )
 	
 	    or
@@ -104,6 +117,20 @@ class AttributeQuery {
 	        "' flows locally to old-type operation '" + consumer.getMethod().getName() +
 	        "' after conversion to '" + newType + "'."
 	    )
+
+	    or
+	    // Global flow is generated specifically for this CAST field and only
+	    // reports old-type operations reached across method boundaries.
+	    exists(Expr source, MethodCall consumer |
+	      fieldValueGloballyFlowsToOldTypeConsumer(
+	        attributeField, source, consumer
+	      ) and
+	      usageLoc = consumer.getLocation() and
+	      message = "[Global] Value from attribute '" +
+	        attributeField.getName() + "' reaches old-type operation '" +
+	        consumer.getMethod().getName() +
+	        "' across method boundaries after conversion to '" + newType + "'."
+	    )
 	  )
 	select usageLoc, message
 	'''
@@ -129,6 +156,8 @@ class AttributeQuery {
 	import java
 	import orion_dataflow
 	import utils
+
+	«DataFlowLibrary.generateGlobalCastFlow(entityName, fieldName, newFieldType)»
 
 	from Class entity, Field referenceField, Location usageLoc, string message,
 	     string oldType, string newType
@@ -160,6 +189,14 @@ class AttributeQuery {
 	      message = "Call to reference accessor '" +
 	        accessorCall.getMethod().getName() + "' depends on old type '" +
 	        oldType + "'."
+	    )
+
+	    or
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isFrameworkFieldNameCall(call, propertyName, referenceField) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Persistence API uses reference '" + referenceField.getName() +
+	        "' whose type will change from '" + oldType + "' to '" + newType + "'."
 	    )
 
 	    or
@@ -238,6 +275,18 @@ class AttributeQuery {
 	      message = "[Potential] Reference value from '" +
 	        referenceField.getName() + "' flows locally to old-type operation '" +
 	        consumer.getMethod().getName() + "'."
+	    )
+
+	    or
+	    exists(Expr source, MethodCall consumer |
+	      fieldValueGloballyFlowsToOldTypeConsumer(
+	        referenceField, source, consumer
+	      ) and
+	      usageLoc = consumer.getLocation() and
+	      message = "[Global] Reference value from '" +
+	        referenceField.getName() + "' reaches old-type operation '" +
+	        consumer.getMethod().getName() +
+	        "' across method boundaries after conversion to '" + newType + "'."
 	    )
 	  )
 	select usageLoc, message

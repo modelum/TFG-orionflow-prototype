@@ -5,6 +5,7 @@ import codeql.template.attribute.AttributeQuery
 import codeql.template.entity.EntityQuery
 import codeql.template.feature.FeatureQuery
 import codeql.template.library.DataFlowLibrary
+import codeql.template.library.CallGraphImpactLibrary
 import codeql.template.library.JavaStructuralLibrary
 import codeql.template.library.JpaLibrary
 import codeql.template.library.Library
@@ -57,6 +58,7 @@ class Orion2CodeQL {
 			results.put("orion_java.qll", JavaStructuralLibrary.generate.toString)
 			results.put("orion_spring.qll", SpringCommonLibrary.generate.toString)
 			results.put("orion_dataflow.qll", DataFlowLibrary.generate.toString)
+			results.put("orion_callgraph.qll", CallGraphImpactLibrary.generate.toString)
 			if (framework.includesJpa)
 				results.put("orion_jpa.qll", JpaLibrary.generate.toString)
 			if (framework.includesMongo)
