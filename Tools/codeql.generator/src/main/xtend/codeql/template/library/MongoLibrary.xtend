@@ -20,6 +20,57 @@ class MongoLibrary {
 	  )
 	}
 
+	/** One layer of array/generic containment used by a persistent field type. */
+	private predicate mongoContainedType(Type outer, Type contained) {
+	  contained = outer.(Array).getElementType()
+	  or
+	  contained = outer.(ParameterizedType).getATypeArgument()
+	}
+
+	/** A class occurring directly or inside arrays/parameterized field types. */
+	private predicate mongoFieldContainsClass(Field field, Class contained) {
+	  mongoContainedType*(field.getType(), contained)
+	}
+
+	/** Field persisted as embedded composition rather than a document reference. */
+	private predicate isMongoEmbeddedProperty(Field field) {
+	  field.fromSource() and
+	  not field.isStatic() and
+	  not field.isTransient() and
+	  not exists(Annotation ignored |
+	    ignored = field.getAnAnnotation() and
+	    ignored.getType().hasQualifiedName(
+	      "org.springframework.data.annotation", "Transient"
+	    )
+	  ) and
+	  not exists(Annotation reference |
+	    reference = field.getAnAnnotation() and
+	    isMongoAssociationAnnotation(reference)
+	  )
+	}
+
+	/** A direct, persisted composition edge between two source classes. */
+	predicate mongoDirectlyEmbeds(Class owner, Class embedded) {
+	  exists(Field property |
+	    property.getDeclaringType() = owner and
+	    isMongoEmbeddedProperty(property) and
+	    mongoFieldContainsClass(property, embedded) and
+	    embedded.fromSource() and
+	    embedded != owner
+	  )
+	}
+
+	/** Root document that owns an entity directly or through embedded composition. */
+	predicate mongoDocumentContainsEntity(Class root, Class entity) {
+	  isMongoDocument(root) and
+	  (root = entity or mongoDirectlyEmbeds+(root, entity))
+	}
+
+	/** Root documents and non-root entities reachable through persisted composition. */
+	predicate isMongoPersistentEntity(Class entity) {
+	  exists(Class root | mongoDocumentContainsEntity(root, entity))
+	}
+
 	predicate mongoCollectionHasName(Class entity, string name) {
 	  name = entity.getName()
 	  or
@@ -110,6 +161,61 @@ class MongoLibrary {
 	  )
 	}
 
+	/** Exact property name, or the final component of a nested property path. */
+	bindingset[path]
+	private predicate mongoPropertyPathReferencesField(string path, Field field) {
+	  mongoFieldHasName(field, path)
+	  or
+	  exists(string prefix, string name |
+	    prefix != "" and
+	    mongoFieldHasName(field, name) and
+	    path = prefix + "." + name
+	  )
+	}
+
+	/** A type contains the selected class directly, as an array, or generically. */
+	private predicate mongoTypeContainsClass(Type type, Class entity) {
+	  mongoContainedType*(type, entity)
+	}
+
+	/**
+	 * The enclosing callable provides a concrete Mongo root for this property.
+	 * This prevents a matching literal in an unrelated helper from being bound to
+	 * every persistent class that happens to declare a homonymous field.
+	 */
+	private predicate mongoCallHasEntityContext(MethodCall call, Field field) {
+	  exists(Class root |
+	    mongoDocumentContainsEntity(root, field.getDeclaringType()) and
+	    (
+	      exists(TypeLiteral literal |
+	        literal.getEnclosingCallable() = call.getEnclosingCallable() and
+	        literal.getReferencedType() = root
+	      )
+	      or
+	      exists(Parameter parameter |
+	        parameter.getCallable() = call.getEnclosingCallable() and
+	        mongoTypeContainsClass(parameter.getType(), root)
+	      )
+	      or
+	      mongoTypeContainsClass(call.getEnclosingCallable().getReturnType(), root)
+	    )
+	  )
+	}
+
+	private predicate isSpringDataSortMethod(Method method) {
+	  method.getDeclaringType().getSourceDeclaration().hasQualifiedName(
+	    "org.springframework.data.domain", "Sort"
+	  ) and
+	  method.getName() = "by"
+	}
+
+	private predicate isSpringDataSortOrderMethod(Method method) {
+	  method.getDeclaringType().getSourceDeclaration().getName() = "Order" and
+	  method.getDeclaringType().getSourceDeclaration().getEnclosingType()
+	    .hasQualifiedName("org.springframework.data.domain", "Sort") and
+	  method.getName().regexpMatch("^(asc|desc|by)$")
+	}
+
 	/**
 	 * Gets an individual entry from a MongoDB JSON-like document.
 	 *
@@ -147,13 +253,22 @@ class MongoLibrary {
 	predicate isMongoFieldNameCall(
 	  MethodCall call, StringLiteral propertyName, Field field
 	) {
-	  mongoFieldHasName(field, propertyName.getValue()) and
+	  mongoPropertyPathReferencesField(propertyName.getValue(), field) and
+	  mongoCallHasEntityContext(call, field) and
 	  (
 	    propertyName = call.getArgument(0) and
 	    call.getMethod().getDeclaringType().getASupertype*().hasQualifiedName(
 	      "org.springframework.data.mongodb.core.query", "Criteria"
 	    ) and
-	    call.getMethod().getName() = "where"
+	    call.getMethod().getName().regexpMatch("^(where|and)$")
+	    or
+	    exists(int i |
+	      propertyName = call.getArgument(i) and
+	      isSpringDataSortMethod(call.getMethod())
+	    )
+	    or
+	    propertyName = call.getArgument(0) and
+	    isSpringDataSortOrderMethod(call.getMethod())
 	    or
 	    propertyName = call.getArgument(0) and
 	    call.getMethod().getDeclaringType().getASupertype*().hasQualifiedName(

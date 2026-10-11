@@ -11,6 +11,12 @@ class JavaStructuralLibrary {
 	  a.toString() = b.toString()
 	}
 
+	/** String value of a Java compile-time constant expression. */
+	bindingset[expression]
+	predicate compileTimeStringValue(Expr expression, string value) {
+	  value = expression.(CompileTimeConstantExpr).getStringValue()
+	}
+
 	/** A source-level type reference resolved to the affected class. */
 	predicate referencesEntityType(TypeAccess typeReference, Class entity) {
 	  typeReference.fromSource() and
@@ -20,6 +26,13 @@ class JavaStructuralLibrary {
 	/** A constructor expression resolved to the affected class. */
 	predicate constructsEntity(ClassInstanceExpr creation, Class entity) {
 	  creation.getConstructedType() = entity
+	}
+
+	/** An explicitly declared source constructor of the affected class. */
+	predicate declaresEntityConstructor(Constructor constructor, Class entity) {
+	  constructor.getDeclaringType() = entity and
+	  constructor.fromSource() and
+	  not constructor.isDefaultConstructor()
 	}
 
 	/** A JavaBeans getter for the affected field, validated by owner and signature. */

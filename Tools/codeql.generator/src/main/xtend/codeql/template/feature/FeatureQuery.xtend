@@ -16,7 +16,12 @@ class FeatureQuery {
 	)
 	'''
 	«IF framework.includesJpa && framework.includesMongo»
-	frameworkQueryReferencesField(«queryVariable», «fieldVariable»)
+	(
+	(isJpaFrameworkQuery(«queryVariable») and usesField(«queryExpression»))
+	 or
+	(isMongoFrameworkQuery(«queryVariable») and
+	 frameworkQueryReferencesField(«queryVariable», «fieldVariable»))
+	)
 	«ELSEIF framework.includesMongo»
 	isQuery(«queryVariable») and
 	(usesField(«queryExpression») or
@@ -155,9 +160,9 @@ class FeatureQuery {
 	    exists(MethodCall call |
 	      (
 	        (isCreateQuery(call) and
-	        exists(StringLiteral queryLiteral |
-	          queryLiteral = call.getArgument(0) and
-	          «queryUsesField("queryLiteral")»
+	        exists(Expr queryValue |
+	          queryValue = call.getArgument(0) and
+	          «queryUsesField("queryValue")»
 	        ))
 	
 	        or
@@ -297,9 +302,9 @@ class FeatureQuery {
 	      (
 	        // agrupa las dos alternativas
 	        (isCreateQuery(call) and
-	        exists(StringLiteral queryLiteral |
-	          queryLiteral = call.getArgument(0) and
-	          «queryUsesField("queryLiteral")»
+	        exists(Expr queryValue |
+	          queryValue = call.getArgument(0) and
+	          «queryUsesField("queryValue")»
 	        ))
 	
 	        or

@@ -26,6 +26,18 @@ class EntityQuery {
 		      message =
 		        "Entity '" + entity.getName() + "' is marked for deletion."
 		    )
+
+		    or
+		    // Explicit constructor declarations are separate rename/delete sites.
+		    // Compiler-provided default constructors have no source location and
+		    // are intentionally excluded by declaresEntityConstructor.
+		    exists(Constructor constructor |
+		      declaresEntityConstructor(constructor, entity) and
+		      usageLoc = constructor.getLocation() and
+		      message =
+		        "Explicit constructor of entity '" + entity.getName() +
+		        "' becomes invalid when the entity is deleted."
+		    )
 		
 		    or
 		    // Any source type reference resolved to the affected entity. This
@@ -54,28 +66,20 @@ class EntityQuery {
 		    )
 
 		    or
-		    exists(Annotation metadata |
-		      frameworkEntityMetadataAnnotation(entity, metadata) and
-		      usageLoc = metadata.getLocation() and
-		      message = "Persistence metadata declares entity '" + entity.getName() +
-		        "' which is marked for deletion."
-		    )
-
-		    or
 		    exists(MethodCall call, StringLiteral collectionName |
 		      isFrameworkCollectionNameCall(call, collectionName, entity) and
 		      usageLoc = collectionName.getLocation() and
 		      message = "Persistence call references the stored collection for entity '" +
 		        entity.getName() + "' which is marked for deletion."
 		    )
-		
+
 		    or
 		    // A declared JPA named query is itself a schema dependency; it does
 		    // not need a separate Spring Data @Query reference to be relevant.
-		    exists(Annotation nq, StringLiteral queryLiteral |
+		    exists(Annotation nq, Expr queryValue |
 		      isNamedQuery(nq) and
-		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = nq.getValue("query") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = nq.getLocation() and
 		      message =
 		        "Named query uses entity '" + entity.getName() +
@@ -84,10 +88,10 @@ class EntityQuery {
 		
 		    or
 		    // JPQL queries in @Query
-		    exists(Annotation q, StringLiteral queryLiteral |
+		    exists(Annotation q, Expr queryValue |
 		      isQuery(q) and
-		      queryLiteral = q.getValue("value") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = q.getValue("value") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Query uses entity '" + entity.getName() +
@@ -96,10 +100,10 @@ class EntityQuery {
 		
 		    or
 		    // EntityManager.createQuery(...)
-		    exists(MethodCall call, StringLiteral queryLiteral |
+		    exists(MethodCall call, Expr queryValue |
 		      isCreateQuery(call) and
-		      queryLiteral = call.getArgument(0) and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = call.getArgument(0) and
+		      usesOldEntity(queryValue) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createQuery uses entity '" + entity.getName() +
@@ -109,13 +113,13 @@ class EntityQuery {
 		    or
 		    // EntityManager.createNamedQuery(...)
 		    exists(MethodCall call, StringLiteral nameArg,
-		           Annotation nq, StringLiteral queryLiteral |
+		           Annotation nq, Expr queryValue |
 		      isCreateNamedQuery(call) and
 		      nameArg = call.getArgument(0) and
 		      isNamedQuery(nq) and
 		      "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
-		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = nq.getValue("query") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createNamedQuery uses entity '" + entity.getName() +
@@ -153,6 +157,15 @@ class EntityQuery {
 		        "Entity '" + oldEntity.getName() +
 		        "' will be renamed to '" + newName + "'."
 		    )
+
+		    or
+		    exists(Constructor constructor |
+		      declaresEntityConstructor(constructor, oldEntity) and
+		      usageLoc = constructor.getLocation() and
+		      message =
+		        "Explicit constructor of entity '" + oldEntity.getName() +
+		        "' must use the new name '" + newName + "'."
+		    )
 		
 		    or
 		    // Any source type reference resolved to the affected entity.
@@ -178,10 +191,10 @@ class EntityQuery {
 
 		    or
 		    exists(Annotation metadata |
-		      frameworkEntityMetadataAnnotation(oldEntity, metadata) and
+		      frameworkEntityRenameMetadataAnnotation(oldEntity, metadata) and
 		      usageLoc = metadata.getLocation() and
-		      message = "Persistence metadata declares entity '" + oldEntity.getName() +
-		        "' which will be renamed to '" + newName + "'."
+		      message = "Explicit logical entity name '" + oldEntity.getName() +
+		        "' must be reviewed for rename to '" + newName + "'."
 		    )
 
 		    or
@@ -194,10 +207,10 @@ class EntityQuery {
 		
 		    or
 		    // A declared JPA named query is itself a schema dependency.
-		    exists(Annotation nq, StringLiteral queryLiteral |
+		    exists(Annotation nq, Expr queryValue |
 		      isNamedQuery(nq) and
-		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = nq.getValue("query") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = nq.getLocation() and
 		      message =
 		        "Named query uses old entity name '" + oldEntity.getName() +
@@ -206,10 +219,10 @@ class EntityQuery {
 		
 		    or
 		    // JPQL queries in @Query
-		    exists(Annotation q, StringLiteral queryLiteral |
+		    exists(Annotation q, Expr queryValue |
 		      isQuery(q) and
-		      queryLiteral = q.getValue("value") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = q.getValue("value") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = q.getTarget().getLocation() and
 		      message =
 		        "Query uses old entity name '" + oldEntity.getName() +
@@ -218,10 +231,10 @@ class EntityQuery {
 		
 		    or
 		    // EntityManager.createQuery(...)
-		    exists(MethodCall call, StringLiteral queryLiteral |
+		    exists(MethodCall call, Expr queryValue |
 		      isCreateQuery(call) and
-		      queryLiteral = call.getArgument(0) and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = call.getArgument(0) and
+		      usesOldEntity(queryValue) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createQuery uses old entity name '" + oldEntity.getName() +
@@ -231,13 +244,13 @@ class EntityQuery {
 		    or
 		    // EntityManager.createNamedQuery(...)
 		    exists(MethodCall call, StringLiteral nameArg,
-		           Annotation nq, StringLiteral queryLiteral |
+		           Annotation nq, Expr queryValue |
 		      isCreateNamedQuery(call) and
 		      nameArg = call.getArgument(0) and
 		      isNamedQuery(nq) and
 		      "\"" + nameArg.getValue() + "\"" = nq.getValue("name").toString() and
-		      queryLiteral = nq.getValue("query") and
-		      usesOldEntity(queryLiteral) and
+		      queryValue = nq.getValue("query") and
+		      usesOldEntity(queryValue) and
 		      usageLoc = call.getLocation() and
 		      message =
 		        "Call to createNamedQuery uses old entity name '" + oldEntity.getName() +

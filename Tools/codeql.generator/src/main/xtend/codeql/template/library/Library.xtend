@@ -14,13 +14,16 @@ class Library {
 	)
 	'''
 	/** Check if entity «entityName» is used in a selected framework query. */
-	predicate usesOldEntity(StringLiteral queryValue) {
+	predicate usesOldEntity(Expr queryValue) {
+	  exists(string queryText |
+	    compileTimeStringValue(queryValue, queryText) and
+	    (
 	  «IF framework.includesJpa»
-	  queryValue.getValue().regexpMatch(
+	  queryText.regexpMatch(
 	    "(?i).*\\b(FROM|UPDATE|DELETE\\s+FROM)\\s+«entityName»\\b.*"
 	  )
 	  or
-	  queryValue.getValue().regexpMatch(
+	  queryText.regexpMatch(
 	    "(?i).*\\bJOIN\\s+(?:FETCH\\s+)?«entityName»\\b.*"
 	  )
 	  «IF framework.includesMongo»or«ENDIF»
@@ -28,10 +31,12 @@ class Library {
 	  «IF framework.includesMongo»
 	  // Mongo aggregation/look-up collection references. The entity name is a
 	  // generated literal, never an AST-derived regex fragment.
-	  queryValue.getValue().regexpMatch(
+	  queryText.regexpMatch(
 	    "(?i).*(from|collection)\\s*['\"]?\\s*[:=,(]\\s*['\"]?«entityName»\\b.*"
 	  )
 	  «ENDIF»
+	    )
+	  )
 	}
 	'''
 
@@ -47,30 +52,35 @@ class Library {
 	'''
 	/** Check if logical field «entityName».«fieldName» occurs in a framework query. */
 	predicate usesField(Expr queryValue) {
+	  exists(string queryText |
+	    compileTimeStringValue(queryValue, queryText) and
+	    (
 	  «IF framework.includesJpa»
-	  queryValue.toString().regexpMatch(
+	  queryText.regexpMatch(
 	    "(?i).*\\b«entityName»\\s*\\.\\s*«fieldName»\\b.*"
 	  )
 	  or
 	  exists(string declaredAlias, string usedAlias |
-	    declaredAlias = queryValue.toString().regexpCapture(
+	    declaredAlias = queryText.regexpCapture(
 	      "(?i).*(FROM|JOIN)\\s+«entityName»\\s+([a-zA-Z0-9_]+).*", 2
 	    ) and
-	    usedAlias = queryValue.toString().regexpCapture(
+	    usedAlias = queryText.regexpCapture(
 	      "(?i).*\\b([a-zA-Z0-9_]+)\\s*\\.\\s*«fieldName»\\b.*", 1
 	    ) and
 	    declaredAlias = usedAlias
 	  )
 	  or
-	  queryValue.toString().regexpMatch("(?i).*FROM\\s+«entityName»\\b.*") and
-	  queryValue.toString().regexpMatch("(?i).*\\bWHERE\\b.*\\b«fieldName»\\b.*")
+	  queryText.regexpMatch("(?i).*FROM\\s+«entityName»\\b.*") and
+	  queryText.regexpMatch("(?i).*\\bWHERE\\b.*\\b«fieldName»\\b.*")
 	  «IF framework.includesMongo»or«ENDIF»
 	  «ENDIF»
 	  «IF framework.includesMongo»
-	  queryValue.toString().regexpMatch(
+	  queryText.regexpMatch(
 	    "(?i).*['\"]?«fieldName»['\"]?\\s*:.*"
 	  )
 	  «ENDIF»
+	    )
+	  )
 	}
 	'''
 
@@ -87,10 +97,7 @@ class Library {
 	  isEntity(entity) and
 	  propertyName.getValue() = "«fieldName»" and
 	  isSpringValidationPropertyCall(call, propertyName) and
-	  exists(Parameter entityParameter |
-	    entityParameter = call.getEnclosingCallable().getAParameter() and
-	    entityParameter.getType() = entity
-	  )
+	  springValidationCallTargetsEntity(call, propertyName.getValue(), entity)
 	}
 
 	/** A selected Spring Data repository query derived from «fieldName». */
@@ -124,12 +131,20 @@ class Library {
 	/** Persistent domain type according to the selected adapter composition. */
 	predicate isEntity(Class entity) {
 	  «IF framework.includesJpa»isJpaEntity(entity)«IF framework.includesMongo» or«ENDIF»«ENDIF»
-	  «IF framework.includesMongo»isMongoDocument(entity)«ENDIF»
+	  «IF framework.includesMongo»isMongoPersistentEntity(entity)«ENDIF»
 	}
 
 	predicate frameworkEntityMetadataAnnotation(Class entity, Annotation annotation) {
 	  «IF framework.includesJpa»isJpaEntityMetadataAnnotation(entity, annotation)«IF framework.includesMongo» or«ENDIF»«ENDIF»
 	  «IF framework.includesMongo»isMongoEntityMetadataAnnotation(entity, annotation)«ENDIF»
+	}
+
+	/** Metadata that independently carries the logical entity name being renamed. */
+	predicate frameworkEntityRenameMetadataAnnotation(
+	  Class entity, Annotation annotation
+	) {
+	  «IF framework.includesJpa»isJpaEntityRenameMetadataAnnotation(entity, annotation)«ELSE»annotation = entity.getAnAnnotation() and
+	  annotation.getType().hasQualifiedName("orionflow.disabled", "Entity")«ENDIF»
 	}
 
 	predicate isFrameworkCollectionNameCall(
@@ -143,6 +158,14 @@ class Library {
 	predicate isQuery(Annotation annotation) {
 	  «IF framework.includesJpa»isJpaQuery(annotation)«IF framework.includesMongo» or«ENDIF»«ENDIF»
 	  «IF framework.includesMongo»isMongoQuery(annotation)«ENDIF»
+	}
+
+	predicate isJpaFrameworkQuery(Annotation annotation) {
+	  «IF framework.includesJpa»isJpaQuery(annotation)«ELSE»annotation.getType().hasQualifiedName("orionflow.disabled", "JpaQuery")«ENDIF»
+	}
+
+	predicate isMongoFrameworkQuery(Annotation annotation) {
+	  «IF framework.includesMongo»isMongoQuery(annotation)«ELSE»annotation.getType().hasQualifiedName("orionflow.disabled", "MongoQuery")«ENDIF»
 	}
 
 	predicate isNamedQuery(Annotation annotation) {
@@ -166,7 +189,7 @@ class Library {
 	  «IF framework.includesJpa»isJpaEntity(field.getDeclaringType()) and
 	  isJpaQuery(query) and
 	  jpaQueryReferencesField(query.getValue("value"), field)«IF framework.includesMongo» or«ENDIF»«ENDIF»
-	  «IF framework.includesMongo»isMongoDocument(field.getDeclaringType()) and
+	  «IF framework.includesMongo»isMongoPersistentEntity(field.getDeclaringType()) and
 	  isMongoQuery(query) and
 	  mongoQueryReferencesField(query.getValue("value"), field)«ENDIF»
 	}
@@ -182,14 +205,14 @@ class Library {
 	predicate frameworkMetadataReferencesField(Annotation annotation, Field field) {
 	  «IF framework.includesJpa»isJpaEntity(field.getDeclaringType()) and
 	  jpaMetadataReferencesField(annotation, field)«IF framework.includesMongo» or«ENDIF»«ENDIF»
-	  «IF framework.includesMongo»isMongoDocument(field.getDeclaringType()) and
+	  «IF framework.includesMongo»isMongoPersistentEntity(field.getDeclaringType()) and
 	  mongoMetadataReferencesField(annotation, field)«ENDIF»
 	}
 
 	predicate isFrameworkFieldNameCall(
 	  MethodCall call, StringLiteral propertyName, Field field
 	) {
-	  «IF framework.includesMongo»isMongoDocument(field.getDeclaringType()) and
+	  «IF framework.includesMongo»isMongoPersistentEntity(field.getDeclaringType()) and
 	  isMongoFieldNameCall(call, propertyName, field)«ELSE»propertyName = call.getArgument(0) and
 	  field.hasName(propertyName.getValue()) and
 	  call.getMethod().hasQualifiedName("orionflow.disabled", "FieldApi", "field")«ENDIF»

@@ -51,16 +51,37 @@ class ModuleGenerationTest {
         assertTrue(mongo.contains("predicate mongoCollectionHasName"));
         assertTrue(mongo.contains("annotation.getStringValue(\"collection\")"));
         assertTrue(mongo.contains("predicate mongoFieldHasName"));
+        assertTrue(mongo.contains("predicate isMongoPersistentEntity"));
+        assertTrue(mongo.contains("mongoDirectlyEmbeds+(root, entity)"));
+        assertTrue(mongo.contains("not field.isStatic()"));
+        assertTrue(mongo.contains("not field.isTransient()"));
         assertTrue(mongo.contains("isMongoCollectionNameCall"));
         assertTrue(mongo.contains("MongoOperations"));
         assertTrue(mongo.contains("CompoundIndex"));
         assertTrue(mongo.contains("queryValue.(CompileTimeConstantExpr).getStringValue()"));
         assertTrue(mongo.contains("document.splitAt(\"{\").splitAt(\"[\").splitAt(\",\")"));
         assertEquals(2, occurrences(mongo, "bindingset[document]"));
+        assertEquals(1, occurrences(mongo, "bindingset[path]"));
         assertTrue(mongo.contains("mongoDocumentReferencesField(annotation.getStringValue(\"def\"), field)"));
         assertTrue(mongo.contains("name = annotation.getStringValue(\"value\")"));
         assertTrue(mongo.contains("^(update|set|setOnInsert|unset|rename|inc|multiply|min|max|currentDate|currentTimestamp|push|pushAll|addToSet|pop|pull|pullAll|bitwise)$"));
+        assertTrue(mongo.contains("^(where|and)$"));
+        assertTrue(mongo.contains("isSpringDataSortMethod"));
+        assertTrue(mongo.contains("isSpringDataSortOrderMethod"));
+        assertTrue(mongo.contains("mongoCallHasEntityContext(call, field)"));
         assertFalse(mongo.contains("queryValue.toString().regexpCapture"));
+    }
+
+    @Test
+    void springValidationSupportsTypedAndLocalObjectCastBindings() {
+        String spring = SpringCommonLibrary.generate().toString();
+
+        assertTrue(spring.contains("predicate springValidationCallTargetsEntity"));
+        assertTrue(spring.contains("target.getType().(RefType).hasQualifiedName(\"java.lang\", \"Object\")"));
+        assertTrue(spring.contains("cast.getExpr() = target.getAnAccess()"));
+        assertTrue(spring.contains("variable.getInitializer() = cast"));
+        assertTrue(spring.contains("springValidatorSupportsEntity"));
+        assertTrue(spring.contains("otherEntity != entity"));
     }
 
     @Test
@@ -115,6 +136,9 @@ class ModuleGenerationTest {
         assertTrue(field.contains("birthDate"));
         assertFalse(entity.contains("+ entity.getName()"));
         assertFalse(field.contains("+ field.getName()"));
+        assertTrue(entity.contains("compileTimeStringValue(queryValue, queryText)"));
+        assertTrue(field.contains("compileTimeStringValue(queryValue, queryText)"));
+        assertFalse(field.contains("queryValue.toString().regexp"));
     }
 
     private int occurrences(String text, String token) {

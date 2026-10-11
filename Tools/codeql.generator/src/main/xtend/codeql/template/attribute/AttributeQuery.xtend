@@ -47,6 +47,16 @@ class AttributeQuery {
 	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
 	        "' depends on attribute type '" + oldType + "' which will change to '" + newType + "'."
 	    )
+
+	    or
+	    // Typed persistence APIs may impose ordering/comparison semantics that
+	    // depend on the attribute's previous type.
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isFrameworkFieldNameCall(call, propertyName, attributeField) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Persistence API uses attribute '" + attributeField.getName() +
+	        "' whose type will change from '" + oldType + "' to '" + newType + "'."
+	    )
 	
 	    or
 	    // direct access to the attribute
@@ -160,6 +170,14 @@ class AttributeQuery {
 	      message = "Call to reference accessor '" +
 	        accessorCall.getMethod().getName() + "' depends on old type '" +
 	        oldType + "'."
+	    )
+
+	    or
+	    exists(MethodCall call, StringLiteral propertyName |
+	      isFrameworkFieldNameCall(call, propertyName, referenceField) and
+	      usageLoc = propertyName.getLocation() and
+	      message = "Persistence API uses reference '" + referenceField.getName() +
+	        "' whose type will change from '" + oldType + "' to '" + newType + "'."
 	    )
 
 	    or

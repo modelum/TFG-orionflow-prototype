@@ -136,9 +136,9 @@ class RelationshipQuery {
 	      (
 	        (
 	          isCreateQuery(call) and
-	          exists(StringLiteral queryLiteral |
-	            queryLiteral = call.getArgument(0) and
-	            usesRelationship(queryLiteral, relationshipField)
+	          exists(Expr queryValue |
+	            queryValue = call.getArgument(0) and
+	            usesRelationship(queryValue, relationshipField)
 	          )
 	        )
 	        or
