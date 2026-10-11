@@ -124,6 +124,7 @@ function Assert-GeneratedModuleLayout {
         'orion_java.qll',
         'orion_spring.qll',
         'orion_dataflow.qll',
+        'orion_callgraph.qll',
         'utils.qll',
         'suite.qls',
         'codeql-pack.yml'

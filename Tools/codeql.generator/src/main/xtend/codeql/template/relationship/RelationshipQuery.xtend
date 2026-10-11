@@ -47,6 +47,7 @@ class RelationshipQuery {
 	)
 	'''
 	import java
+	import orion_callgraph
 	import orion_dataflow
 	import utils
 	
@@ -81,6 +82,20 @@ class RelationshipQuery {
 	      usageLoc = accessorCall.getLocation() and
 	      message = "Call to accessor '" + accessorCall.getMethod().getName() +
 	        "' depends on relationship '" + relationshipField.getName() + "' which will be deleted."
+	    )
+
+	    or
+	    // One or two resolved call edges from a direct relationship access.
+	    exists(
+	      Method impactedMethod, MethodCall evidence, string depth, string reason
+	    |
+	      fieldCallGraphImpact(
+	        relationshipField, impactedMethod, evidence, depth, reason
+	      ) and
+	      usageLoc = impactedMethod.getLocation() and
+	      message = "[CallGraph depth " + depth + "] Method '" +
+	        impactedMethod.getName() + "' indirectly depends on relationship '" +
+	        relationshipField.getName() + "': it " + reason + "."
 	    )
 
 	    or

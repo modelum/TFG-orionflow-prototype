@@ -1,16 +1,3 @@
-/.Library.java._trace
 /.Metadata.java._trace
-/.Query.java._trace
-/Library.java
 /Metadata.java
-/Query.java
-/.DataFlowLibrary.java._trace
-/.JavaStructuralLibrary.java._trace
-/.JpaLibrary.java._trace
-/.MongoLibrary.java._trace
-/.SpringCommonLibrary.java._trace
-/DataFlowLibrary.java
-/JavaStructuralLibrary.java
-/JpaLibrary.java
-/MongoLibrary.java
-/SpringCommonLibrary.java
+/.Metadata.xtendbin

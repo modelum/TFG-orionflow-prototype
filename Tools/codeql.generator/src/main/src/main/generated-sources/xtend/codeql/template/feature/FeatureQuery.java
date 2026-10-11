@@ -1,5 +1,6 @@
-package codeql.template;
+package codeql.template.feature;
 
+import codeql.template.library.Library;
 import config.PersistenceFramework;
 import org.eclipse.xtend2.lib.StringConcatenation;
 
@@ -15,32 +16,70 @@ public class FeatureQuery {
     _builder.append(")");
     return _builder;
   }
-  
+
   private static CharSequence queryAnnotationUsesField(final String queryVariable, final String queryExpression, final String fieldVariable, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     {
-      boolean _includesMongo = framework.includesMongo();
-      if (_includesMongo) {
-        _builder.append("(usesField(");
-        _builder.append(queryExpression);
-        _builder.append(") or frameworkQueryReferencesField(");
+      if ((framework.includesJpa() && framework.includesMongo())) {
+        _builder.append("(");
+        _builder.newLine();
+        _builder.append("(isJpaFrameworkQuery(");
         _builder.append(queryVariable);
-        _builder.append(", ");
-        _builder.append(fieldVariable);
-        _builder.append("))");
-      } else {
-        _builder.append("usesField(");
+        _builder.append(") and usesField(");
         _builder.append(queryExpression);
+        _builder.append("))");
+        _builder.newLineIfNotEmpty();
+        _builder.append(" ");
+        _builder.append("or");
+        _builder.newLine();
+        _builder.append("(isMongoFrameworkQuery(");
+        _builder.append(queryVariable);
+        _builder.append(") and");
+        _builder.newLineIfNotEmpty();
+        _builder.append(" ");
+        _builder.append("frameworkQueryReferencesField(");
+        _builder.append(queryVariable, " ");
+        _builder.append(", ");
+        _builder.append(fieldVariable, " ");
+        _builder.append("))");
+        _builder.newLineIfNotEmpty();
         _builder.append(")");
+        _builder.newLine();
+      } else {
+        boolean _includesMongo = framework.includesMongo();
+        if (_includesMongo) {
+          _builder.append("isQuery(");
+          _builder.append(queryVariable);
+          _builder.append(") and");
+          _builder.newLineIfNotEmpty();
+          _builder.append("(usesField(");
+          _builder.append(queryExpression);
+          _builder.append(") or");
+          _builder.newLineIfNotEmpty();
+          _builder.append(" ");
+          _builder.append("frameworkQueryReferencesField(");
+          _builder.append(queryVariable, " ");
+          _builder.append(", ");
+          _builder.append(fieldVariable, " ");
+          _builder.append("))");
+          _builder.newLineIfNotEmpty();
+        } else {
+          _builder.append("isQuery(");
+          _builder.append(queryVariable);
+          _builder.append(") and usesField(");
+          _builder.append(queryExpression);
+          _builder.append(")");
+          _builder.newLineIfNotEmpty();
+        }
       }
     }
     return _builder;
   }
-  
+
   public static CharSequence generateFeatureRenameOp(final String entityName, final String featureOldName, final String featureNewName) {
     return FeatureQuery.generateFeatureRenameOp(entityName, featureOldName, featureNewName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateFeatureRenameOp(final String entityName, final String featureOldName, final String featureNewName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -352,9 +391,6 @@ public class FeatureQuery {
     _builder.append("exists(Annotation q |");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("isQuery(q) and");
-    _builder.newLine();
-    _builder.append("      ");
     CharSequence _queryAnnotationUsesField = FeatureQuery.queryAnnotationUsesField("q", "q.getValue(\"value\")", "featureField", framework);
     _builder.append(_queryAnnotationUsesField, "      ");
     _builder.append(" and");
@@ -388,13 +424,13 @@ public class FeatureQuery {
     _builder.append("(isCreateQuery(call) and");
     _builder.newLine();
     _builder.append("        ");
-    _builder.append("exists(StringLiteral queryLiteral |");
+    _builder.append("exists(Expr queryValue |");
     _builder.newLine();
     _builder.append("          ");
-    _builder.append("queryLiteral = call.getArgument(0) and");
+    _builder.append("queryValue = call.getArgument(0) and");
     _builder.newLine();
     _builder.append("          ");
-    CharSequence _queryUsesField_1 = FeatureQuery.queryUsesField("queryLiteral");
+    CharSequence _queryUsesField_1 = FeatureQuery.queryUsesField("queryValue");
     _builder.append(_queryUsesField_1, "          ");
     _builder.newLineIfNotEmpty();
     _builder.append("        ");
@@ -445,14 +481,16 @@ public class FeatureQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateFeatureDeleteOp(final String entityName, final String featureName) {
     return FeatureQuery.generateFeatureDeleteOp(entityName, featureName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateFeatureDeleteOp(final String entityName, final String featureName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
+    _builder.newLine();
+    _builder.append("import orion_callgraph");
     _builder.newLine();
     _builder.append("import orion_dataflow");
     _builder.newLine();
@@ -632,6 +670,49 @@ public class FeatureQuery {
     _builder.append("or");
     _builder.newLine();
     _builder.append("    ");
+    _builder.append("// Bounded call-graph propagation from methods that directly access the");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// deleted field. Only result/effect-dependent callers are reported.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("Method impactedMethod, MethodCall evidence, string depth, string reason");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("|");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("fieldCallGraphImpact(");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("attributeField, impactedMethod, evidence, depth, reason");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append(") and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = impactedMethod.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"[CallGraph depth \" + depth + \"] Method \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("impactedMethod.getName() + \"\' depends on deleted attribute \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("attributeField.getName() + \"\': it \" + reason + \".\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
     _builder.append("exists(MethodCall call, StringLiteral propertyName |");
     _builder.newLine();
     _builder.append("      ");
@@ -734,9 +815,6 @@ public class FeatureQuery {
     _builder.append("exists(Annotation q |");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("isQuery(q) and");
-    _builder.newLine();
-    _builder.append("      ");
     CharSequence _queryAnnotationUsesField = FeatureQuery.queryAnnotationUsesField("q", "q.getValue(\"value\")", "attributeField", framework);
     _builder.append(_queryAnnotationUsesField, "      ");
     _builder.append(" and");
@@ -773,13 +851,13 @@ public class FeatureQuery {
     _builder.append("(isCreateQuery(call) and");
     _builder.newLine();
     _builder.append("        ");
-    _builder.append("exists(StringLiteral queryLiteral |");
+    _builder.append("exists(Expr queryValue |");
     _builder.newLine();
     _builder.append("          ");
-    _builder.append("queryLiteral = call.getArgument(0) and");
+    _builder.append("queryValue = call.getArgument(0) and");
     _builder.newLine();
     _builder.append("          ");
-    CharSequence _queryUsesField_1 = FeatureQuery.queryUsesField("queryLiteral");
+    CharSequence _queryUsesField_1 = FeatureQuery.queryUsesField("queryValue");
     _builder.append(_queryUsesField_1, "          ");
     _builder.newLineIfNotEmpty();
     _builder.append("        ");
@@ -861,15 +939,17 @@ public class FeatureQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateFeatureMoveOp(final String sourceEntityName, final String sourceFeatureName, final String targetEntityName, final String targetFeatureName) {
     return FeatureQuery.generateFeatureMoveOp(sourceEntityName, sourceFeatureName, targetEntityName, targetFeatureName, 
       PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateFeatureMoveOp(final String sourceEntityName, final String sourceFeatureName, final String targetEntityName, final String targetFeatureName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
+    _builder.newLine();
+    _builder.append("import orion_callgraph");
     _builder.newLine();
     _builder.append("import orion_dataflow");
     _builder.newLine();
@@ -971,6 +1051,46 @@ public class FeatureQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("\"\' must be updated for moved feature \'\" + featureField.getName() + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("Method impactedMethod, MethodCall evidence, string depth, string reason");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("|");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("fieldCallGraphImpact(");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("featureField, impactedMethod, evidence, depth, reason");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append(") and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = impactedMethod.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"[CallGraph depth \" + depth + \"] Method \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("impactedMethod.getName() + \"\' depends on moved feature \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("featureField.getName() + \"\': it \" + reason +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\" and must be redirected to its new owner.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -1108,9 +1228,6 @@ public class FeatureQuery {
     _builder.newLine();
     _builder.append("    ");
     _builder.append("exists(Annotation query |");
-    _builder.newLine();
-    _builder.append("      ");
-    _builder.append("isQuery(query) and");
     _builder.newLine();
     _builder.append("      ");
     CharSequence _queryAnnotationUsesField = FeatureQuery.queryAnnotationUsesField("query", "query.getValue(\"value\")", "featureField", framework);

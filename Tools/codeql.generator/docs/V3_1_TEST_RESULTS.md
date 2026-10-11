@@ -4,7 +4,7 @@ Validation date: 2026-10-11.
 
 ## Toolchain
 
-- Generator: Maven with Java 17 (Xtend 2.25.0).
+- Generator: Maven with JDK 11 (Xtend 2.25.0).
 - CodeQL CLI: 2.27.2.
 - CodeQL Java pack: `codeql/java-all@9.3.2`.
 - Dataset: checked-in internal Java fixtures. PetClinic and StudAdvice were not
@@ -13,7 +13,7 @@ Validation date: 2026-10-11.
 
 ## Results
 
-- Maven unit/integration tests: 37 passed, 0 failed.
+- Maven unit/integration tests: 33 passed, 0 failed.
 - Default CLI profile and explicit `--framework jpa`: byte-identical output.
 - Generated queries: 9 JPA, 9 Mongo, and 9 Both.
 - CodeQL `query compile --check-only`: 27/27 passed.

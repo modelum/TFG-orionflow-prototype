@@ -1,4 +1,4 @@
-package codeql.template;
+package codeql.template.relationship;
 
 import config.PersistenceFramework;
 import org.eclipse.xtend2.lib.StringConcatenation;
@@ -11,7 +11,7 @@ public class RelationshipQuery {
   public static CharSequence generateRelationshipRenameOp(final String oldTableName, final String newTableName) {
     return RelationshipQuery.generateRelationshipRenameOp(oldTableName, newTableName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateRelationshipRenameOp(final String oldTableName, final String newTableName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -74,14 +74,16 @@ public class RelationshipQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateRelationshipDeleteOp(final String deleteTableName) {
     return RelationshipQuery.generateRelationshipDeleteOp(deleteTableName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateRelationshipDeleteOp(final String deleteTableName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
+    _builder.newLine();
+    _builder.append("import orion_callgraph");
     _builder.newLine();
     _builder.append("import orion_dataflow");
     _builder.newLine();
@@ -175,6 +177,46 @@ public class RelationshipQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("\"\' depends on relationship \'\" + relationshipField.getName() + \"\' which will be deleted.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// One or two resolved call edges from a direct relationship access.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("Method impactedMethod, MethodCall evidence, string depth, string reason");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("|");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("fieldCallGraphImpact(");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("relationshipField, impactedMethod, evidence, depth, reason");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append(") and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = impactedMethod.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"[CallGraph depth \" + depth + \"] Method \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("impactedMethod.getName() + \"\' indirectly depends on relationship \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("relationshipField.getName() + \"\': it \" + reason + \".\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -335,13 +377,13 @@ public class RelationshipQuery {
     _builder.append("isCreateQuery(call) and");
     _builder.newLine();
     _builder.append("          ");
-    _builder.append("exists(StringLiteral queryLiteral |");
+    _builder.append("exists(Expr queryValue |");
     _builder.newLine();
     _builder.append("            ");
-    _builder.append("queryLiteral = call.getArgument(0) and");
+    _builder.append("queryValue = call.getArgument(0) and");
     _builder.newLine();
     _builder.append("            ");
-    _builder.append("usesRelationship(queryLiteral, relationshipField)");
+    _builder.append("usesRelationship(queryValue, relationshipField)");
     _builder.newLine();
     _builder.append("          ");
     _builder.append(")");

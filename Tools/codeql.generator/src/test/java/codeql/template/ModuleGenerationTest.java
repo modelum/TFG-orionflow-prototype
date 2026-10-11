@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import codeql.template.attribute.AttributeQuery;
 import codeql.template.feature.FeatureQuery;
 import codeql.template.library.DataFlowLibrary;
+import codeql.template.library.CallGraphImpactLibrary;
 import codeql.template.library.JpaLibrary;
 import codeql.template.library.Library;
 import codeql.template.library.MongoLibrary;
@@ -111,6 +112,47 @@ class ModuleGenerationTest {
         assertTrue(moveFeature.contains("fieldValueFlowsToDependentCall"));
         assertTrue(deleteRelationship.contains("relationshipValueFlowsToMutation"));
         assertFalse(renameFeature.contains("import orion_dataflow"));
+        assertTrue(castAttribute.contains("module OrionCastGlobalConfig"));
+        assertTrue(castAttribute.contains("OrionCastGlobalFlow::flow"));
+        assertTrue(castReference.contains("module OrionCastGlobalConfig"));
+        assertFalse(deleteFeature.contains("OrionCastGlobalFlow::flow"));
+        assertFalse(moveFeature.contains("OrionCastGlobalFlow::flow"));
+        assertFalse(deleteRelationship.contains("OrionCastGlobalFlow::flow"));
+    }
+
+    @Test
+    void callGraphIsBoundedAndImportedOnlyBySelectedOperations() {
+        String library = CallGraphImpactLibrary.generate().toString();
+        String deleteFeature = FeatureQuery.generateFeatureDeleteOp(
+            "Visit", "date").toString();
+        String moveFeature = FeatureQuery.generateFeatureMoveOp(
+            "Visit", "date", "Archive", "archivedDate").toString();
+        String deleteRelationship = RelationshipQuery.generateRelationshipDeleteOp(
+            "visit_tags").toString();
+        String renameFeature = FeatureQuery.generateFeatureRenameOp(
+            "Visit", "date", "startDate").toString();
+
+        assertTrue(library.contains("viableCallable(call)"));
+        assertTrue(library.contains("not call instanceof ValueDiscardingExpr"));
+        assertTrue(library.contains("depth = \"1\""));
+        assertTrue(library.contains("depth = \"2\""));
+        assertFalse(library.contains("fieldCallGraphImpact+"));
+        assertTrue(deleteFeature.contains("import orion_callgraph"));
+        assertTrue(moveFeature.contains("import orion_callgraph"));
+        assertTrue(deleteRelationship.contains("import orion_callgraph"));
+        assertFalse(renameFeature.contains("import orion_callgraph"));
+    }
+
+    @Test
+    void globalCastConfigurationIsSpecificToGeneratedSco() {
+        String global = DataFlowLibrary.generateGlobalCastFlow(
+            "Visit", "date", "String").toString();
+
+        assertTrue(global.contains("entity.hasName(\"Visit\")"));
+        assertTrue(global.contains("field.hasName(\"date\")"));
+        assertTrue(global.contains("replacementType.getName() = \"String\""));
+        assertTrue(global.contains("DataFlow::Global<OrionCastGlobalConfig>"));
+        assertTrue(global.contains("not DataFlow::localFlow"));
     }
 
     @Test

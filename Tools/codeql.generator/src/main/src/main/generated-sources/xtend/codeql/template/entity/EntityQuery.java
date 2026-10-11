@@ -1,5 +1,6 @@
-package codeql.template;
+package codeql.template.entity;
 
+import codeql.template.library.Library;
 import config.PersistenceFramework;
 import org.eclipse.xtend2.lib.StringConcatenation;
 
@@ -11,7 +12,7 @@ public class EntityQuery {
   public static CharSequence generateEntityDeleteOp(final String entityName) {
     return EntityQuery.generateEntityDeleteOp(entityName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateEntityDeleteOp(final String entityName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -49,6 +50,40 @@ public class EntityQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("\"Entity \'\" + entity.getName() + \"\' is marked for deletion.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// Explicit constructor declarations are separate rename/delete sites.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// Compiler-provided default constructors have no source location and");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// are intentionally excluded by declaresEntityConstructor.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(Constructor constructor |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("declaresEntityConstructor(constructor, entity) and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = constructor.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message =");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"Explicit constructor of entity \'\" + entity.getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' becomes invalid when the entity is deleted.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -132,28 +167,6 @@ public class EntityQuery {
     _builder.append("or");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(Annotation metadata |");
-    _builder.newLine();
-    _builder.append("      ");
-    _builder.append("frameworkEntityMetadataAnnotation(entity, metadata) and");
-    _builder.newLine();
-    _builder.append("      ");
-    _builder.append("usageLoc = metadata.getLocation() and");
-    _builder.newLine();
-    _builder.append("      ");
-    _builder.append("message = \"Persistence metadata declares entity \'\" + entity.getName() +");
-    _builder.newLine();
-    _builder.append("        ");
-    _builder.append("\"\' which is marked for deletion.\"");
-    _builder.newLine();
-    _builder.append("    ");
-    _builder.append(")");
-    _builder.newLine();
-    _builder.newLine();
-    _builder.append("    ");
-    _builder.append("or");
-    _builder.newLine();
-    _builder.append("    ");
     _builder.append("exists(MethodCall call, StringLiteral collectionName |");
     _builder.newLine();
     _builder.append("      ");
@@ -182,16 +195,16 @@ public class EntityQuery {
     _builder.append("// not need a separate Spring Data @Query reference to be relevant.");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(Annotation nq, StringLiteral queryLiteral |");
+    _builder.append("exists(Annotation nq, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isNamedQuery(nq) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = nq.getValue(\"query\") and");
+    _builder.append("queryValue = nq.getValue(\"query\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = nq.getLocation() and");
@@ -216,16 +229,16 @@ public class EntityQuery {
     _builder.append("// JPQL queries in @Query");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(Annotation q, StringLiteral queryLiteral |");
+    _builder.append("exists(Annotation q, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isQuery(q) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = q.getValue(\"value\") and");
+    _builder.append("queryValue = q.getValue(\"value\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = q.getTarget().getLocation() and");
@@ -250,16 +263,16 @@ public class EntityQuery {
     _builder.append("// EntityManager.createQuery(...)");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(MethodCall call, StringLiteral queryLiteral |");
+    _builder.append("exists(MethodCall call, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isCreateQuery(call) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = call.getArgument(0) and");
+    _builder.append("queryValue = call.getArgument(0) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = call.getLocation() and");
@@ -287,7 +300,7 @@ public class EntityQuery {
     _builder.append("exists(MethodCall call, StringLiteral nameArg,");
     _builder.newLine();
     _builder.append("           ");
-    _builder.append("Annotation nq, StringLiteral queryLiteral |");
+    _builder.append("Annotation nq, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isCreateNamedQuery(call) and");
@@ -302,10 +315,10 @@ public class EntityQuery {
     _builder.append("\"\\\"\" + nameArg.getValue() + \"\\\"\" = nq.getValue(\"name\").toString() and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = nq.getValue(\"query\") and");
+    _builder.append("queryValue = nq.getValue(\"query\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = call.getLocation() and");
@@ -330,11 +343,11 @@ public class EntityQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateEntityRenameOp(final String oldEntityName, final String newEntityName) {
     return EntityQuery.generateEntityRenameOp(oldEntityName, newEntityName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateEntityRenameOp(final String oldEntityName, final String newEntityName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -380,6 +393,31 @@ public class EntityQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("\"\' will be renamed to \'\" + newName + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(Constructor constructor |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("declaresEntityConstructor(constructor, oldEntity) and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = constructor.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message =");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"Explicit constructor of entity \'\" + oldEntity.getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' must use the new name \'\" + newName + \"\'.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -454,16 +492,16 @@ public class EntityQuery {
     _builder.append("exists(Annotation metadata |");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("frameworkEntityMetadataAnnotation(oldEntity, metadata) and");
+    _builder.append("frameworkEntityRenameMetadataAnnotation(oldEntity, metadata) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = metadata.getLocation() and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("message = \"Persistence metadata declares entity \'\" + oldEntity.getName() +");
+    _builder.append("message = \"Explicit logical entity name \'\" + oldEntity.getName() +");
     _builder.newLine();
     _builder.append("        ");
-    _builder.append("\"\' which will be renamed to \'\" + newName + \"\'.\"");
+    _builder.append("\"\' must be reviewed for rename to \'\" + newName + \"\'.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -498,16 +536,16 @@ public class EntityQuery {
     _builder.append("// A declared JPA named query is itself a schema dependency.");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(Annotation nq, StringLiteral queryLiteral |");
+    _builder.append("exists(Annotation nq, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isNamedQuery(nq) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = nq.getValue(\"query\") and");
+    _builder.append("queryValue = nq.getValue(\"query\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = nq.getLocation() and");
@@ -532,16 +570,16 @@ public class EntityQuery {
     _builder.append("// JPQL queries in @Query");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(Annotation q, StringLiteral queryLiteral |");
+    _builder.append("exists(Annotation q, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isQuery(q) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = q.getValue(\"value\") and");
+    _builder.append("queryValue = q.getValue(\"value\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = q.getTarget().getLocation() and");
@@ -566,16 +604,16 @@ public class EntityQuery {
     _builder.append("// EntityManager.createQuery(...)");
     _builder.newLine();
     _builder.append("    ");
-    _builder.append("exists(MethodCall call, StringLiteral queryLiteral |");
+    _builder.append("exists(MethodCall call, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isCreateQuery(call) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = call.getArgument(0) and");
+    _builder.append("queryValue = call.getArgument(0) and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = call.getLocation() and");
@@ -603,7 +641,7 @@ public class EntityQuery {
     _builder.append("exists(MethodCall call, StringLiteral nameArg,");
     _builder.newLine();
     _builder.append("           ");
-    _builder.append("Annotation nq, StringLiteral queryLiteral |");
+    _builder.append("Annotation nq, Expr queryValue |");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("isCreateNamedQuery(call) and");
@@ -618,10 +656,10 @@ public class EntityQuery {
     _builder.append("\"\\\"\" + nameArg.getValue() + \"\\\"\" = nq.getValue(\"name\").toString() and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("queryLiteral = nq.getValue(\"query\") and");
+    _builder.append("queryValue = nq.getValue(\"query\") and");
     _builder.newLine();
     _builder.append("      ");
-    _builder.append("usesOldEntity(queryLiteral) and");
+    _builder.append("usesOldEntity(queryValue) and");
     _builder.newLine();
     _builder.append("      ");
     _builder.append("usageLoc = call.getLocation() and");
@@ -646,7 +684,7 @@ public class EntityQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   /**
    * Splitting removes the original entity from the source model. Keep the
    * dedicated entry point while intentionally reusing the deletion detector.
@@ -654,7 +692,7 @@ public class EntityQuery {
   public static CharSequence generateEntitySplitOp(final String entityName) {
     return EntityQuery.generateEntitySplitOp(entityName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateEntitySplitOp(final String entityName, final PersistenceFramework framework) {
     return EntityQuery.generateEntityDeleteOp(entityName, framework);
   }

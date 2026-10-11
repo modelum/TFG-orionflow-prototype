@@ -1,5 +1,6 @@
-package codeql.template;
+package codeql.template.attribute;
 
+import codeql.template.library.DataFlowLibrary;
 import config.PersistenceFramework;
 import org.eclipse.xtend2.lib.StringConcatenation;
 
@@ -11,7 +12,7 @@ public class AttributeQuery {
   public static CharSequence generateAttributeCastOp(final String entityName, final String fieldName, final String newFieldType) {
     return AttributeQuery.generateAttributeCastOp(entityName, fieldName, newFieldType, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateAttributeCastOp(final String entityName, final String fieldName, final String newFieldType, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -20,6 +21,10 @@ public class AttributeQuery {
     _builder.newLine();
     _builder.append("import utils");
     _builder.newLine();
+    _builder.newLine();
+    CharSequence _generateGlobalCastFlow = DataFlowLibrary.generateGlobalCastFlow(entityName, fieldName, newFieldType);
+    _builder.append(_generateGlobalCastFlow);
+    _builder.newLineIfNotEmpty();
     _builder.newLine();
     _builder.append("from");
     _builder.newLine();
@@ -110,6 +115,34 @@ public class AttributeQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("\"\' depends on attribute type \'\" + oldType + \"\' which will change to \'\" + newType + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// Typed persistence APIs may impose ordering/comparison semantics that");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// depend on the attribute\'s previous type.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(MethodCall call, StringLiteral propertyName |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("isFrameworkFieldNameCall(call, propertyName, attributeField) and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = propertyName.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"Persistence API uses attribute \'\" + attributeField.getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' whose type will change from \'\" + oldType + \"\' to \'\" + newType + \"\'.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -275,6 +308,46 @@ public class AttributeQuery {
     _builder.append("    ");
     _builder.append(")");
     _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// Global flow is generated specifically for this CAST field and only");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("// reports old-type operations reached across method boundaries.");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(Expr source, MethodCall consumer |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("fieldValueGloballyFlowsToOldTypeConsumer(");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("attributeField, source, consumer");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append(") and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = consumer.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"[Global] Value from attribute \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("attributeField.getName() + \"\' reaches old-type operation \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("consumer.getMethod().getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' across method boundaries after conversion to \'\" + newType + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
     _builder.append("  ");
     _builder.append(")");
     _builder.newLine();
@@ -282,12 +355,12 @@ public class AttributeQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateReferenceCastOp(final String entityName, final String fieldName, final String newFieldType) {
     return AttributeQuery.generateReferenceCastOp(entityName, fieldName, newFieldType, 
       PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateReferenceCastOp(final String entityName, final String fieldName, final String newFieldType, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");
@@ -296,6 +369,10 @@ public class AttributeQuery {
     _builder.newLine();
     _builder.append("import utils");
     _builder.newLine();
+    _builder.newLine();
+    CharSequence _generateGlobalCastFlow = DataFlowLibrary.generateGlobalCastFlow(entityName, fieldName, newFieldType);
+    _builder.append(_generateGlobalCastFlow);
+    _builder.newLineIfNotEmpty();
     _builder.newLine();
     _builder.append("from Class entity, Field referenceField, Location usageLoc, string message,");
     _builder.newLine();
@@ -386,6 +463,28 @@ public class AttributeQuery {
     _builder.newLine();
     _builder.append("        ");
     _builder.append("oldType + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(MethodCall call, StringLiteral propertyName |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("isFrameworkFieldNameCall(call, propertyName, referenceField) and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = propertyName.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"Persistence API uses reference \'\" + referenceField.getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' whose type will change from \'\" + oldType + \"\' to \'\" + newType + \"\'.\"");
     _builder.newLine();
     _builder.append("    ");
     _builder.append(")");
@@ -608,6 +707,40 @@ public class AttributeQuery {
     _builder.append("    ");
     _builder.append(")");
     _builder.newLine();
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("or");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append("exists(Expr source, MethodCall consumer |");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("fieldValueGloballyFlowsToOldTypeConsumer(");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("referenceField, source, consumer");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append(") and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("usageLoc = consumer.getLocation() and");
+    _builder.newLine();
+    _builder.append("      ");
+    _builder.append("message = \"[Global] Reference value from \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("referenceField.getName() + \"\' reaches old-type operation \'\" +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("consumer.getMethod().getName() +");
+    _builder.newLine();
+    _builder.append("        ");
+    _builder.append("\"\' across method boundaries after conversion to \'\" + newType + \"\'.\"");
+    _builder.newLine();
+    _builder.append("    ");
+    _builder.append(")");
+    _builder.newLine();
     _builder.append("  ");
     _builder.append(")");
     _builder.newLine();
@@ -615,11 +748,11 @@ public class AttributeQuery {
     _builder.newLine();
     return _builder;
   }
-  
+
   public static CharSequence generateAttributePromoteOp(final String entityName, final String newKeyName) {
     return AttributeQuery.generateAttributePromoteOp(entityName, newKeyName, PersistenceFramework.JPA);
   }
-  
+
   public static CharSequence generateAttributePromoteOp(final String entityName, final String newKeyName, final PersistenceFramework framework) {
     StringConcatenation _builder = new StringConcatenation();
     _builder.append("import java");

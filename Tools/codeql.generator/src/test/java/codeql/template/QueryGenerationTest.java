@@ -56,6 +56,8 @@ class QueryGenerationTest {
 
         assertTrue(cast.contains("import orion_dataflow"));
         assertTrue(cast.contains("fieldValueFlowsToOldTypeConsumer"));
+        assertTrue(cast.contains("fieldValueGloballyFlowsToOldTypeConsumer"));
+        assertTrue(cast.contains("[Global]"));
         assertTrue(cast.contains("[Potential]"));
         assertFalse(rename.contains("import orion_dataflow"));
     }
@@ -71,6 +73,8 @@ class QueryGenerationTest {
         assertFalse(rename.contains("callsAccessor"));
         assertTrue(delete.contains("callsAccessor(accessorCall, relationshipField)"));
         assertTrue(delete.contains("access.getField() = relationshipField"));
+        assertTrue(delete.contains("fieldCallGraphImpact"));
+        assertFalse(rename.contains("fieldCallGraphImpact"));
     }
 
     @Test

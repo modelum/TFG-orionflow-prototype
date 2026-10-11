@@ -31,6 +31,7 @@ to `EntityQuery`, `FeatureQuery`, `AttributeQuery`, or `RelationshipQuery`.
 | `orion_jpa.qll` | JPA/JPQL and Spring Data JPA semantics, including `jakarta.persistence` and `javax.persistence`. | `--framework jpa` or `both`. |
 | `orion_mongo.qll` | Spring Data MongoDB semantics for documents, stored names, repositories, query strings, mapping metadata, `MongoOperations`, Criteria, Update, and aggregation APIs. | `--framework mongo` or `both`. |
 | `orion_dataflow.qll` | Source/sink-constrained `DataFlow::localFlow` helpers. | Always for a non-empty transformation; imported only by participating SCO queries. |
+| `orion_callgraph.qll` | Field-seeded, resolved call propagation with explicit value/effect semantics and a maximum depth of two edges. | Always emitted; imported only by Delete Feature, Move Feature, and Delete Relationship. |
 | `utils.qll` | Stable facade that imports the structural/shared modules and only the selected persistence adapters. Operation queries depend on this facade. | Always for a non-empty transformation. |
 
 In `both` mode, `utils.qll` combines JPA and MongoDB alternatives. The Java and
@@ -45,16 +46,18 @@ Every framework selection enables:
 
 1. Structural Java impact detection.
 2. Semantics for the selected persistence adapter or adapters.
-3. Local DataFlow only in the five SCO templates listed below.
+3. Local DataFlow in the five SCO templates listed below.
+4. Query-local global DataFlow only for CAST Attribute and CAST Reference.
+5. Bounded call-graph propagation only for Delete Feature, Move Feature, and
+   Delete Relationship.
 
 `AnalysisMode` and `-m`/`--mode` have been removed. `-a ALL`/`--analysis ALL`
 is accepted only as a deprecated no-op for older invocations; it does not
 select a different query set.
 
-## Selective DataFlow
+## Selective DataFlow and Call Graph
 
-DataFlow is local and opt-in per SCO; there is no global flow or taint-tracking
-configuration. The five participating operations are:
+Local DataFlow remains opt-in per SCO. The five participating operations are:
 
 - Delete Feature: a value read from the deleted field reaches a dependent call.
 - Cast Attribute: the old value reaches a consumer tied to the old type.
@@ -67,6 +70,20 @@ Each rule binds the affected `Field` first, constrains its source to a resolved
 field/getter read, and constrains its sink to the operation-specific consumer.
 These findings are labelled as potential impacts. Other SCO queries do not
 import `orion_dataflow.qll`.
+
+V3.2 adds a generated `DataFlow::Global` configuration to Cast Attribute and
+Cast Reference only. Each configuration is emitted inside the operation query
+and binds its source to the exact entity and field names known during Orion
+generation. Its sinks are resolved calls that require the old field type and
+are not supported by the replacement type. A local-flow exclusion avoids
+duplicating the existing lightweight findings.
+
+`orion_callgraph.qll` starts from methods that directly access the affected
+field and follows exactly one or two resolved call edges. Static/direct calls
+use their source declaration; virtual calls use CodeQL's `viableCallable`.
+Propagation requires a consumed return value, a collection mutation receiver,
+or an incoming mutation effect. Discarded pure values and unrelated overloads
+do not propagate. There is deliberately no unbounded transitive closure.
 
 ## Evolution identity
 
@@ -101,13 +118,16 @@ exist for their actual QL types, such as `TypeAccess.fromSource()`.
 
 ## Build and validation tiers
 
-The Maven lifecycle compiles Xtend/Java and executes the generator tests. That
-tier currently passes. Generated output has also been checked at the generation
-level: each framework profile produces the expected 16 operation queries for
-the current integration script, and omission of `--framework` resolves to JPA.
+The Maven lifecycle compiles Xtend/Java and executes the generator tests. The
+V3.2 suite contains 35 passing tests. Each framework profile produces the
+expected 16 operation queries for the current integration script, and omission
+of `--framework` resolves to JPA.
 
 The target QL environment is CodeQL CLI 2.27.2 with `codeql/java-all` 9.3.2.
-A partial compatibility compilation was performed before the final modular
-validation pass. Full compilation of all current JPA, MongoDB, and `both`
-outputs, followed by query evaluation and result validation, is still in
-progress and must not be inferred from the passing Maven tier.
+All 48 JPA, MongoDB, and `both` operation queries compile in that environment.
+The three profiles were evaluated on the same fixture database: JPA produced
+175 raw results, MongoDB 55, and `both` 230 (224 unique). The unique `both`
+result set is exactly the union of JPA and MongoDB, with no missing or extra
+identities. The V3.2 categories contribute 24 Call Graph findings and 7 global
+CAST findings in `both`; their positive and negative fixtures are checked by
+`scripts/verify-v3_2-results.ps1`.

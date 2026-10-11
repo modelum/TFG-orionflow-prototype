@@ -19,8 +19,22 @@ class Visit {
     @Column(name = "birthDate")
     private LocalDate birthDate;
 
-    LocalDate getBirthDate() { return birthDate; }
+    private LocalDate getBirthDateInternal() { return birthDate; }
+    private LocalDate getBirthDateInternal(String unrelated) { return LocalDate.MIN; }
+
+    LocalDate getBirthDate() { return getBirthDateInternal(); }
     void setBirthDate(LocalDate value) { this.birthDate = value; }
+
+    int birthYear() { return getBirthDateInternal().getYear(); }
+    int birthYearSummary() { return birthYear(); }
+
+    void discardedBirthDate() {
+        getBirthDateInternal(); // negative: discarded value without side effect
+    }
+
+    int unrelatedBirthDateOverload() {
+        return getBirthDateInternal("audit").getYear(); // negative overload
+    }
 
     // Homonymous overload: negative expectation for resolved setter matching.
     void setBirthDate(String formatted) { }
